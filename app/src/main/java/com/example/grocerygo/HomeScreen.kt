@@ -76,7 +76,6 @@ fun HomeScreen(
     onCategoryClick: (String) -> Unit = {},
     onProfileClick: () -> Unit = {}
 ) {
-
     val firestore = remember {
         FirebaseFirestore.getInstance()
     }
@@ -102,19 +101,16 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
-
         listenerRegistration = firestore
             .collection("products")
             .addSnapshotListener { snapshot, exception ->
 
                 if (exception != null) {
-
                     errorMessage =
                         exception.message
                             ?: "Failed to load groceries."
 
                     isLoading = false
-
                     return@addSnapshotListener
                 }
 
@@ -123,13 +119,18 @@ fun HomeScreen(
                         ?.mapNotNull { document ->
 
                             try {
-
                                 GroceryProduct(
                                     id = document.id,
                                     name = document.getString("name") ?: "",
                                     category = document.getString("category") ?: "",
-                                    price = document.getDouble("price") ?: 0.0,
-                                    discount = document.getDouble("discount") ?: 0.0,
+                                    price =
+                                        (document.get("price") as? Number)
+                                            ?.toDouble()
+                                            ?: 0.0,
+                                    discount =
+                                        (document.get("discount") as? Number)
+                                            ?.toDouble()
+                                            ?: 0.0,
                                     description =
                                         document.getString("description")
                                             ?: "",
@@ -137,9 +138,12 @@ fun HomeScreen(
                                         document.getString("imageUrl")
                                             ?: "",
                                     stock =
-                                        document.getLong("stock")
+                                        (document.get("stock") as? Number)
                                             ?.toInt()
                                             ?: 0,
+                                    unit =
+                                        document.getString("unit")
+                                            ?: "piece",
                                     featured =
                                         document.getBoolean("featured")
                                             ?: false,
@@ -150,10 +154,10 @@ fun HomeScreen(
                                         document.getBoolean("dailyOffer")
                                             ?: false,
                                     createdAt =
-                                        document.getLong("createdAt")
+                                        (document.get("createdAt") as? Number)
+                                            ?.toLong()
                                             ?: 0L
                                 )
-
                             } catch (e: Exception) {
                                 null
                             }
@@ -168,7 +172,6 @@ fun HomeScreen(
     }
 
     DisposableEffect(Unit) {
-
         onDispose {
             listenerRegistration?.remove()
         }
@@ -219,15 +222,10 @@ fun HomeScreen(
         }
 
     Scaffold(
-
         topBar = {
-
             TopAppBar(
-
                 title = {
-
                     Column {
-
                         Text(
                             text = "GroceryGo",
                             fontSize = 22.sp,
@@ -242,27 +240,10 @@ fun HomeScreen(
                         )
                     }
                 },
-
-                navigationIcon = {
-
-                    IconButton(
-                        onClick = onMenuClick
-                    ) {
-
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "Menu",
-                            tint = GroceryDark
-                        )
-                    }
-                },
-
                 actions = {
-
                     IconButton(
                         onClick = onCartClick
                     ) {
-
                         Icon(
                             imageVector = Icons.Default.ShoppingCart,
                             contentDescription = "Cart",
@@ -273,7 +254,6 @@ fun HomeScreen(
                     IconButton(
                         onClick = onProfileClick
                     ) {
-
                         Icon(
                             imageVector = Icons.Default.Person,
                             contentDescription = "Profile",
@@ -283,13 +263,11 @@ fun HomeScreen(
                 }
             )
         }
-
     ) { paddingValues ->
 
         when {
 
             isLoading -> {
-
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -297,7 +275,6 @@ fun HomeScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-
                     CircularProgressIndicator(
                         color = GroceryGreen
                     )
@@ -305,7 +282,6 @@ fun HomeScreen(
             }
 
             errorMessage.isNotBlank() -> {
-
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -313,13 +289,10 @@ fun HomeScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-
                     Column(
                         modifier = Modifier.padding(30.dp),
-                        horizontalAlignment =
-                            Alignment.CenterHorizontally
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-
                         Icon(
                             imageVector = Icons.Default.Warning,
                             contentDescription = null,
@@ -352,13 +325,10 @@ fun HomeScreen(
             }
 
             else -> {
-
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Color(0xFFF8FAF8)
-                        )
+                        .background(Color(0xFFF8FAF8))
                         .padding(paddingValues),
                     contentPadding = PaddingValues(
                         bottom = 30.dp
@@ -368,7 +338,6 @@ fun HomeScreen(
                 ) {
 
                     item {
-
                         Spacer(
                             modifier = Modifier.height(4.dp)
                         )
@@ -387,7 +356,6 @@ fun HomeScreen(
                                 )
                             },
                             leadingIcon = {
-
                                 Icon(
                                     imageVector =
                                         Icons.Default.Search,
@@ -397,17 +365,12 @@ fun HomeScreen(
                                 )
                             },
                             trailingIcon = {
-
-                                if (
-                                    searchQuery.isNotBlank()
-                                ) {
-
+                                if (searchQuery.isNotBlank()) {
                                     IconButton(
                                         onClick = {
                                             searchQuery = ""
                                         }
                                     ) {
-
                                         Icon(
                                             imageVector =
                                                 Icons.Default.Close,
@@ -435,9 +398,7 @@ fun HomeScreen(
                     }
 
                     if (searchQuery.isBlank()) {
-
                         item {
-
                             HomeWelcomeCard(
                                 productCount =
                                     products.size
@@ -449,9 +410,7 @@ fun HomeScreen(
                         searchQuery.isBlank() &&
                         categories.isNotEmpty()
                     ) {
-
                         item {
-
                             HomeSectionTitle(
                                 title =
                                     "Grocery Categories"
@@ -459,7 +418,6 @@ fun HomeScreen(
                         }
 
                         item {
-
                             LazyRow(
                                 contentPadding =
                                     PaddingValues(
@@ -470,11 +428,9 @@ fun HomeScreen(
                                         12.dp
                                     )
                             ) {
-
                                 items(
                                     items = categories
                                 ) { category ->
-
                                     CategoryCard(
                                         category = category,
                                         onClick = {
@@ -488,24 +444,16 @@ fun HomeScreen(
                         }
                     }
 
-                    if (
-                        searchQuery.isNotBlank()
-                    ) {
-
+                    if (searchQuery.isNotBlank()) {
                         item {
-
                             HomeSectionTitle(
                                 title =
                                     "Search Results"
                             )
                         }
 
-                        if (
-                            filteredProducts.isEmpty()
-                        ) {
-
+                        if (filteredProducts.isEmpty()) {
                             item {
-
                                 EmptyProductsCard(
                                     title =
                                         "No groceries found",
@@ -513,16 +461,13 @@ fun HomeScreen(
                                         "Try another product name or category."
                                 )
                             }
-
                         } else {
-
                             items(
                                 items = filteredProducts,
                                 key = {
                                     it.id
                                 }
                             ) { product ->
-
                                 HomeProductCard(
                                     product = product,
                                     onClick = {
@@ -539,9 +484,7 @@ fun HomeScreen(
                         searchQuery.isBlank() &&
                         featuredProducts.isNotEmpty()
                     ) {
-
                         item {
-
                             HomeSectionTitle(
                                 title =
                                     "Featured Products"
@@ -549,7 +492,6 @@ fun HomeScreen(
                         }
 
                         item {
-
                             LazyRow(
                                 contentPadding =
                                     PaddingValues(
@@ -560,7 +502,6 @@ fun HomeScreen(
                                         14.dp
                                     )
                             ) {
-
                                 items(
                                     items =
                                         featuredProducts.take(
@@ -570,7 +511,6 @@ fun HomeScreen(
                                         "featured_${it.id}"
                                     }
                                 ) { product ->
-
                                     HorizontalProductCard(
                                         product = product,
                                         onClick = {
@@ -588,9 +528,7 @@ fun HomeScreen(
                         searchQuery.isBlank() &&
                         bestSellerProducts.isNotEmpty()
                     ) {
-
                         item {
-
                             HomeSectionTitle(
                                 title =
                                     "Best-Selling Products"
@@ -598,7 +536,6 @@ fun HomeScreen(
                         }
 
                         item {
-
                             LazyRow(
                                 contentPadding =
                                     PaddingValues(
@@ -609,7 +546,6 @@ fun HomeScreen(
                                         14.dp
                                     )
                             ) {
-
                                 items(
                                     items =
                                         bestSellerProducts.take(
@@ -619,7 +555,6 @@ fun HomeScreen(
                                         "best_${it.id}"
                                     }
                                 ) { product ->
-
                                     HorizontalProductCard(
                                         product = product,
                                         onClick = {
@@ -637,9 +572,7 @@ fun HomeScreen(
                         searchQuery.isBlank() &&
                         dailyOfferProducts.isNotEmpty()
                     ) {
-
                         item {
-
                             HomeSectionTitle(
                                 title =
                                     "Daily Offers & Discounts"
@@ -647,7 +580,6 @@ fun HomeScreen(
                         }
 
                         item {
-
                             LazyRow(
                                 contentPadding =
                                     PaddingValues(
@@ -658,7 +590,6 @@ fun HomeScreen(
                                         14.dp
                                     )
                             ) {
-
                                 items(
                                     items =
                                         dailyOfferProducts.take(
@@ -668,7 +599,6 @@ fun HomeScreen(
                                         "offer_${it.id}"
                                     }
                                 ) { product ->
-
                                     OfferProductCard(
                                         product = product,
                                         onClick = {
@@ -689,9 +619,7 @@ fun HomeScreen(
                         bestSellerProducts.isEmpty() &&
                         dailyOfferProducts.isEmpty()
                     ) {
-
                         item {
-
                             EmptyProductsCard(
                                 title =
                                     "Products available",
@@ -702,9 +630,7 @@ fun HomeScreen(
                     }
 
                     if (products.isEmpty()) {
-
                         item {
-
                             EmptyProductsCard(
                                 title =
                                     "No groceries available",
@@ -723,7 +649,6 @@ fun HomeScreen(
 private fun HomeWelcomeCard(
     productCount: Int
 ) {
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -733,7 +658,6 @@ private fun HomeWelcomeCard(
             containerColor = GroceryGreen
         )
     ) {
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -741,11 +665,9 @@ private fun HomeWelcomeCard(
             verticalAlignment =
                 Alignment.CenterVertically
         ) {
-
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-
                 Text(
                     text = "Fresh groceries",
                     fontSize = 23.sp,
@@ -776,7 +698,7 @@ private fun HomeWelcomeCard(
                     Icons.Default.ShoppingCart,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(45.dp)
             )
         }
     }
@@ -786,23 +708,15 @@ private fun HomeWelcomeCard(
 private fun HomeSectionTitle(
     title: String
 ) {
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        verticalAlignment =
-            Alignment.CenterVertically
-    ) {
-
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = GroceryDark
-        )
-    }
+    Text(
+        text = title,
+        modifier = Modifier.padding(
+            horizontal = 16.dp
+        ),
+        fontSize = 19.sp,
+        fontWeight = FontWeight.Bold,
+        color = GroceryDark
+    )
 }
 
 @Composable
@@ -810,10 +724,9 @@ private fun CategoryCard(
     category: String,
     onClick: () -> Unit
 ) {
-
     Card(
         modifier = Modifier
-            .width(135.dp)
+            .width(120.dp)
             .clickable {
                 onClick()
             },
@@ -825,7 +738,6 @@ private fun CategoryCard(
             defaultElevation = 2.dp
         )
     ) {
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -833,186 +745,38 @@ private fun CategoryCard(
             horizontalAlignment =
                 Alignment.CenterHorizontally
         ) {
-
             Box(
                 modifier = Modifier
-                    .size(52.dp)
+                    .size(48.dp)
+                    .clip(CircleShape)
                     .background(
-                        GroceryLightGreen,
-                        CircleShape
+                        GroceryLightGreen
                     ),
                 contentAlignment =
                     Alignment.Center
             ) {
-
                 Icon(
                     imageVector =
                         Icons.Default.Category,
                     contentDescription = null,
                     tint = GroceryGreen,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(26.dp)
                 )
             }
 
             Spacer(
-                modifier = Modifier.height(9.dp)
+                modifier = Modifier.height(8.dp)
             )
 
             Text(
                 text = category,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = GroceryDark,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                maxLines = 1,
+                overflow =
+                    TextOverflow.Ellipsis
             )
-        }
-    }
-}
-
-@Composable
-private fun HorizontalProductCard(
-    product: GroceryProduct,
-    onClick: () -> Unit
-) {
-
-    Card(
-        modifier = Modifier
-            .width(190.dp)
-            .clickable {
-                onClick()
-            },
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
-        )
-    ) {
-
-        Column {
-
-            ProductImage(
-                product = product,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(135.dp)
-            )
-
-            Column(
-                modifier = Modifier.padding(12.dp)
-            ) {
-
-                Text(
-                    text = product.name,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GroceryDark,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(
-                    modifier = Modifier.height(3.dp)
-                )
-
-                Text(
-                    text = product.category,
-                    fontSize = 11.sp,
-                    color = GroceryGray,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
-
-                ProductPrice(
-                    product = product
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun OfferProductCard(
-    product: GroceryProduct,
-    onClick: () -> Unit
-) {
-
-    Card(
-        modifier = Modifier
-            .width(205.dp)
-            .clickable {
-                onClick()
-            },
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
-        )
-    ) {
-
-        Column {
-
-            Box {
-
-                ProductImage(
-                    product = product,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                )
-
-                Box(
-                    modifier = Modifier
-                        .padding(10.dp)
-                        .background(
-                            Color(0xFFD32F2F),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .padding(
-                            horizontal = 8.dp,
-                            vertical = 5.dp
-                        )
-                ) {
-
-                    Text(
-                        text =
-                            "${product.discount.toInt()}% OFF",
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Column(
-                modifier = Modifier.padding(12.dp)
-            ) {
-
-                Text(
-                    text = product.name,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GroceryDark,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(
-                    modifier = Modifier.height(4.dp)
-                )
-
-                ProductPrice(
-                    product = product
-                )
-            }
         }
     }
 }
@@ -1022,7 +786,6 @@ private fun HomeProductCard(
     product: GroceryProduct,
     onClick: () -> Unit
 ) {
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1038,33 +801,33 @@ private fun HomeProductCard(
             defaultElevation = 2.dp
         )
     ) {
-
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
             verticalAlignment =
                 Alignment.CenterVertically
         ) {
-
             ProductImage(
-                product = product,
+                imageUrl = product.imageUrl,
                 modifier = Modifier.size(90.dp)
             )
 
             Spacer(
-                modifier = Modifier.width(12.dp)
+                modifier = Modifier.width(14.dp)
             )
 
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-
                 Text(
                     text = product.name,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = GroceryDark,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow =
+                        TextOverflow.Ellipsis
                 )
 
                 Spacer(
@@ -1078,33 +841,127 @@ private fun HomeProductCard(
                 )
 
                 Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
-
-                ProductPrice(
-                    product = product
-                )
-
-                Spacer(
                     modifier = Modifier.height(6.dp)
                 )
 
                 Text(
                     text =
                         if (product.stock > 0) {
-                            "In stock: ${product.stock}"
+                            "In stock: ${product.stock} ${product.unit}"
                         } else {
                             "Out of stock"
                         },
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color =
                         if (product.stock > 0) {
                             GroceryGreen
                         } else {
                             Color(0xFFD32F2F)
-                        },
-                    fontWeight =
-                        FontWeight.SemiBold
+                        }
+                )
+
+                Spacer(
+                    modifier = Modifier.height(7.dp)
+                )
+
+                ProductPrice(
+                    product = product
+                )
+            }
+
+            Icon(
+                imageVector =
+                    Icons.Default.ArrowForward,
+                contentDescription = null,
+                tint = GroceryGray,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun HorizontalProductCard(
+    product: GroceryProduct,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(190.dp)
+            .clickable {
+                onClick()
+            },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
+    ) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(135.dp)
+            ) {
+                ProductImage(
+                    imageUrl = product.imageUrl,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                if (product.discount > 0) {
+                    Text(
+                        text =
+                            "${product.discount.toInt()}% OFF",
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .background(
+                                GroceryGreen,
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(
+                                horizontal = 7.dp,
+                                vertical = 4.dp
+                            ),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.padding(12.dp)
+            ) {
+                Text(
+                    text = product.name,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GroceryDark,
+                    maxLines = 1,
+                    overflow =
+                        TextOverflow.Ellipsis
+                )
+
+                Spacer(
+                    modifier = Modifier.height(4.dp)
+                )
+
+                Text(
+                    text =
+                        "${product.unit} • ${product.stock} available",
+                    fontSize = 11.sp,
+                    color = GroceryGray
+                )
+
+                Spacer(
+                    modifier = Modifier.height(6.dp)
+                )
+
+                ProductPrice(
+                    product = product
                 )
             }
         }
@@ -1112,31 +969,104 @@ private fun HomeProductCard(
 }
 
 @Composable
-private fun ProductImage(
+private fun OfferProductCard(
     product: GroceryProduct,
-    modifier: Modifier = Modifier
+    onClick: () -> Unit
 ) {
-
-    Box(
-        modifier = modifier
-            .clip(
-                RoundedCornerShape(14.dp)
-            )
-            .background(
-                GroceryLightGreen
-            ),
-        contentAlignment =
-            Alignment.Center
-    ) {
-
-        Icon(
-            imageVector =
-                Icons.Default.Inventory,
-            contentDescription =
-                product.name,
-            tint = GroceryGreen,
-            modifier = Modifier.size(42.dp)
+    Card(
+        modifier = Modifier
+            .width(205.dp)
+            .clickable {
+                onClick()
+            },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
         )
+    ) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+            ) {
+                ProductImage(
+                    imageUrl = product.imageUrl,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                Row(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .background(
+                            Color(0xFFFF7043),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(
+                            horizontal = 8.dp,
+                            vertical = 5.dp
+                        ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector =
+                            Icons.Default.LocalOffer,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+
+                    Spacer(
+                        modifier = Modifier.width(4.dp)
+                    )
+
+                    Text(
+                        text =
+                            "${product.discount.toInt()}% OFF",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.padding(12.dp)
+            ) {
+                Text(
+                    text = product.name,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GroceryDark,
+                    maxLines = 1,
+                    overflow =
+                        TextOverflow.Ellipsis
+                )
+
+                Spacer(
+                    modifier = Modifier.height(4.dp)
+                )
+
+                Text(
+                    text =
+                        "${product.stock} ${product.unit} available",
+                    fontSize = 11.sp,
+                    color = GroceryGray
+                )
+
+                Spacer(
+                    modifier = Modifier.height(6.dp)
+                )
+
+                ProductPrice(
+                    product = product
+                )
+            }
+        }
     }
 }
 
@@ -1144,36 +1074,35 @@ private fun ProductImage(
 private fun ProductPrice(
     product: GroceryProduct
 ) {
-
     Row(
         verticalAlignment =
             Alignment.CenterVertically
     ) {
-
         Text(
-            text = String.format(
-                Locale.US,
-                "PKR %.0f",
-                product.discountedPrice
-            ),
+            text =
+                "PKR ${String.format(
+                    Locale.US,
+                    "%.0f",
+                    product.discountedPrice
+                )}",
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = GroceryGreen
         )
 
         if (product.discount > 0) {
-
             Spacer(
-                modifier = Modifier.width(6.dp)
+                modifier = Modifier.width(7.dp)
             )
 
             Text(
-                text = String.format(
-                    Locale.US,
-                    "PKR %.0f",
-                    product.price
-                ),
-                fontSize = 10.sp,
+                text =
+                    "PKR ${String.format(
+                        Locale.US,
+                        "%.0f",
+                        product.price
+                    )}",
+                fontSize = 11.sp,
                 color = GroceryGray
             )
         }
@@ -1185,7 +1114,6 @@ private fun EmptyProductsCard(
     title: String,
     message: String
 ) {
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1195,15 +1123,13 @@ private fun EmptyProductsCard(
             containerColor = Color.White
         )
     ) {
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(30.dp),
+                .padding(25.dp),
             horizontalAlignment =
                 Alignment.CenterHorizontally
         ) {
-
             Icon(
                 imageVector =
                     Icons.Default.Inventory,
@@ -1213,12 +1139,12 @@ private fun EmptyProductsCard(
             )
 
             Spacer(
-                modifier = Modifier.height(12.dp)
+                modifier = Modifier.height(10.dp)
             )
 
             Text(
                 text = title,
-                fontSize = 17.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = GroceryDark
             )
@@ -1231,6 +1157,38 @@ private fun EmptyProductsCard(
                 text = message,
                 fontSize = 12.sp,
                 color = GroceryGray
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProductImage(
+    imageUrl: String,
+    modifier: Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                GroceryLightGreen
+            ),
+        contentAlignment =
+            Alignment.Center
+    ) {
+        if (imageUrl.isBlank()) {
+            Icon(
+                imageVector =
+                    Icons.Default.Inventory,
+                contentDescription = null,
+                tint = GroceryGreen,
+                modifier = Modifier.size(42.dp)
+            )
+        } else {
+            coil.compose.AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize()
             )
         }
     }

@@ -102,13 +102,21 @@ class MainActivity : ComponentActivity() {
                 if (isLoggedIn) {
 
                     LaunchedEffect(Unit) {
-                        val uid = auth.currentUser?.uid
-                        if (uid != null) {
+                        val user = auth.currentUser
+                        if (user != null) {
+                            // First check if it's the specific admin email
+                            if (user.email == "admin@gmail.com") {
+                                isAdmin = true
+                            }
+                            
                             val firestore = FirebaseFirestore.getInstance()
-                            firestore.collection("users").document(uid).get()
+                            firestore.collection("users").document(user.uid).get()
                                 .addOnSuccessListener { document ->
                                     if (document != null && document.exists()) {
-                                        isAdmin = document.getString("role") == "admin"
+                                        val role = document.getString("role")
+                                        if (role == "admin" || user.email == "admin@gmail.com") {
+                                            isAdmin = true
+                                        }
                                     }
                                 }
                         }

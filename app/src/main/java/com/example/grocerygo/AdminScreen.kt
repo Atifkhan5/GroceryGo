@@ -1,7 +1,6 @@
 package com.example.grocerygo
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -23,12 +23,13 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -41,9 +42,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -53,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,12 +63,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.grocerygo.ui.theme.GroceryDark
 import com.example.grocerygo.ui.theme.GroceryGray
 import com.example.grocerygo.ui.theme.GroceryGreen
@@ -75,24 +79,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import java.util.Locale
-
-data class GroceryProduct(
-    val id: String = "",
-    val name: String = "",
-    val category: String = "",
-    val price: Double = 0.0,
-    val discount: Double = 0.0,
-    val description: String = "",
-    val imageUrl: String = "",
-    val stock: Int = 0,
-    val featured: Boolean = false,
-    val bestSeller: Boolean = false,
-    val dailyOffer: Boolean = false,
-    val createdAt: Long = 0L
-) {
-    val discountedPrice: Double
-        get() = price - (price * discount / 100.0)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -153,26 +139,34 @@ fun AdminScreen(
     }
 
     LaunchedEffect(Unit) {
-
         val user = auth.currentUser
 
         if (user == null) {
             isCheckingAdmin = false
             isAdmin = false
+            isLoadingProducts = false
             return@LaunchedEffect
         }
 
-        firestore.collection("users")
+        val isEmailAdmin = user.email
+            ?.trim()
+            ?.equals("admin@gmail.com", ignoreCase = true) == true
+
+        firestore
+            .collection("users")
             .document(user.uid)
             .get()
             .addOnSuccessListener { document ->
 
                 val role = document.getString("role")
 
-                isAdmin = role == "admin"
+                isAdmin =
+                    role.equals("admin", ignoreCase = true) ||
+                            isEmailAdmin
+
                 isCheckingAdmin = false
 
-                if (role == "admin") {
+                if (isAdmin) {
 
                     listenerRegistration = firestore
                         .collection("products")
@@ -182,54 +176,94 @@ fun AdminScreen(
                                 errorMessage =
                                     exception.message
                                         ?: "Failed to load products."
+
                                 isLoadingProducts = false
                                 return@addSnapshotListener
                             }
 
-                            products = snapshot?.documents?.mapNotNull { document ->
+                            products =
+                                snapshot?.documents
+                                    ?.mapNotNull { document ->
 
-                                try {
+                                        try {
+                                            GroceryProduct(
+                                                id = document.id,
+                                                name = document.getString("name") ?: "",
+                                                category = document.getString("category") ?: "",
 
-                                    GroceryProduct(
-                                        id = document.id,
-                                        name = document.getString("name") ?: "",
-                                        category = document.getString("category") ?: "",
-                                        price = document.getDouble("price") ?: 0.0,
-                                        discount = document.getDouble("discount") ?: 0.0,
-                                        description = document.getString("description") ?: "",
-                                        imageUrl = document.getString("imageUrl") ?: "",
-                                        stock = document.getLong("stock")?.toInt() ?: 0,
-                                        featured = document.getBoolean("featured") ?: false,
-                                        bestSeller = document.getBoolean("bestSeller") ?: false,
-                                        dailyOffer = document.getBoolean("dailyOffer") ?: false,
-                                        createdAt = document.getLong("createdAt") ?: 0L
-                                    )
+                                                price =
+                                                    (document.get("price") as? Number)
+                                                        ?.toDouble()
+                                                        ?: 0.0,
 
-                                } catch (e: Exception) {
-                                    null
-                                }
+                                                discount =
+                                                    (document.get("discount") as? Number)
+                                                        ?.toDouble()
+                                                        ?: 0.0,
 
-                            }?.sortedByDescending {
-                                it.createdAt
-                            } ?: emptyList()
+                                                description =
+                                                    document.getString("description")
+                                                        ?: "",
+
+                                                imageUrl =
+                                                    document.getString("imageUrl")
+                                                        ?: "",
+
+                                                featured =
+                                                    document.getBoolean("featured")
+                                                        ?: false,
+
+                                                bestSeller =
+                                                    document.getBoolean("bestSeller")
+                                                        ?: false,
+
+                                                dailyOffer =
+                                                    document.getBoolean("dailyOffer")
+                                                        ?: false,
+
+                                                stock =
+                                                    (document.get("stock") as? Number)
+                                                        ?.toInt()
+                                                        ?: 0,
+
+                                                unit =
+                                                    document.getString("unit")
+                                                        ?: "piece",
+
+                                                createdAt =
+                                                    (document.get("createdAt") as? Number)
+                                                        ?.toLong()
+                                                        ?: 0L
+                                            )
+                                        } catch (_: Exception) {
+                                            null
+                                        }
+                                    }
+                                    ?.sortedByDescending {
+                                        it.createdAt
+                                    }
+                                    ?: emptyList()
 
                             isLoadingProducts = false
                         }
+
                 } else {
                     isLoadingProducts = false
                 }
             }
             .addOnFailureListener { exception ->
+
                 isCheckingAdmin = false
                 isAdmin = false
                 isLoadingProducts = false
+
                 errorMessage =
                     exception.message
                         ?: "Unable to verify admin account."
             }
     }
 
-    androidx.compose.runtime.DisposableEffect(Unit) {
+    DisposableEffect(Unit) {
         onDispose {
             listenerRegistration?.remove()
         }
@@ -405,7 +439,7 @@ fun AdminScreen(
 
         floatingActionButton = {
 
-            androidx.compose.material3.FloatingActionButton(
+            FloatingActionButton(
                 onClick = {
 
                     selectedProduct = null
@@ -425,12 +459,15 @@ fun AdminScreen(
     ) { paddingValues ->
 
         LazyColumn(
+
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFFF8FAF8))
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
+
             verticalArrangement = Arrangement.spacedBy(14.dp)
+
         ) {
 
             item {
@@ -651,35 +688,42 @@ fun AdminScreen(
     productToDelete?.let { product ->
 
         AlertDialog(
+
             onDismissRequest = {
                 productToDelete = null
             },
+
             title = {
                 Text(
                     text = "Delete Grocery",
                     fontWeight = FontWeight.Bold
                 )
             },
+
             text = {
                 Text(
                     text = "Are you sure you want to delete \"${product.name}\"? This action cannot be undone."
                 )
             },
+
             confirmButton = {
 
                 TextButton(
                     onClick = {
 
-                        firestore.collection("products")
+                        firestore
+                            .collection("products")
                             .document(product.id)
                             .delete()
                             .addOnSuccessListener {
                                 productToDelete = null
                             }
                             .addOnFailureListener { exception ->
+
                                 errorMessage =
                                     exception.message
                                         ?: "Failed to delete product."
+
                                 productToDelete = null
                             }
                     }
@@ -692,6 +736,7 @@ fun AdminScreen(
                     )
                 }
             },
+
             dismissButton = {
 
                 TextButton(
@@ -709,18 +754,22 @@ fun AdminScreen(
     if (showLogoutDialog) {
 
         AlertDialog(
+
             onDismissRequest = {
                 showLogoutDialog = false
             },
+
             title = {
                 Text(
                     text = "Logout",
                     fontWeight = FontWeight.Bold
                 )
             },
+
             text = {
                 Text("Are you sure you want to logout?")
             },
+
             confirmButton = {
 
                 TextButton(
@@ -739,6 +788,7 @@ fun AdminScreen(
                     )
                 }
             },
+
             dismissButton = {
 
                 TextButton(
@@ -756,15 +806,19 @@ fun AdminScreen(
     if (errorMessage.isNotBlank()) {
 
         AlertDialog(
+
             onDismissRequest = {
                 errorMessage = ""
             },
+
             title = {
                 Text("Error")
             },
+
             text = {
                 Text(errorMessage)
             },
+
             confirmButton = {
 
                 TextButton(
@@ -783,7 +837,7 @@ fun AdminScreen(
 private fun AdminStatCard(
     title: String,
     value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     modifier: Modifier = Modifier
 ) {
 
@@ -858,23 +912,10 @@ private fun AdminProductCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
 
-                Box(
-                    modifier = Modifier
-                        .size(68.dp)
-                        .background(
-                            color = GroceryLightGreen,
-                            shape = RoundedCornerShape(14.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-
-                    Icon(
-                        imageVector = Icons.Default.Inventory,
-                        contentDescription = null,
-                        tint = GroceryGreen,
-                        modifier = Modifier.size(34.dp)
-                    )
-                }
+                ProductImage(
+                    imageUrl = product.imageUrl,
+                    modifier = Modifier.size(72.dp)
+                )
 
                 Spacer(
                     modifier = Modifier.width(12.dp)
@@ -921,7 +962,7 @@ private fun AdminProductCard(
                             color = GroceryGreen
                         )
 
-                        if (product.discount > 0) {
+                        if (product.discount > 0.0) {
 
                             Spacer(
                                 modifier = Modifier.width(6.dp)
@@ -935,6 +976,21 @@ private fun AdminProductCard(
                             )
                         }
                     }
+
+                    Spacer(
+                        modifier = Modifier.height(5.dp)
+                    )
+
+                    Text(
+                        text = "Stock: ${product.stock} ${product.unit}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (product.stock > 0) {
+                            GroceryGreen
+                        } else {
+                            Color(0xFFD32F2F)
+                        }
+                    )
                 }
 
                 Column(
@@ -974,67 +1030,20 @@ private fun AdminProductCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
 
-                ProductTag(
-                    text = "Stock: ${product.stock}",
-                    enabled = true
-                )
-
                 if (product.featured) {
-
-                    ProductTag(
-                        text = "Featured",
-                        enabled = true
-                    )
+                    ProductTag("Featured")
                 }
 
                 if (product.bestSeller) {
-
-                    ProductTag(
-                        text = "Best Seller",
-                        enabled = true
-                    )
+                    ProductTag("Best Seller")
                 }
 
                 if (product.dailyOffer) {
-
-                    ProductTag(
-                        text = "Offer",
-                        enabled = true
-                    )
+                    ProductTag("Offer")
                 }
-            }
 
-            if (product.stock <= 5) {
-
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = Color(0xFFD32F2F),
-                        modifier = Modifier.size(16.dp)
-                    )
-
-                    Spacer(
-                        modifier = Modifier.width(5.dp)
-                    )
-
-                    Text(
-                        text = if (product.stock == 0) {
-                            "Out of stock"
-                        } else {
-                            "Low stock"
-                        },
-                        fontSize = 12.sp,
-                        color = Color(0xFFD32F2F),
-                        fontWeight = FontWeight.SemiBold
-                    )
+                if (product.stock == 0) {
+                    ProductTag("Out of Stock")
                 }
             }
         }
@@ -1043,18 +1052,13 @@ private fun AdminProductCard(
 
 @Composable
 private fun ProductTag(
-    text: String,
-    enabled: Boolean
+    text: String
 ) {
 
     Box(
         modifier = Modifier
             .background(
-                color = if (enabled) {
-                    GroceryLightGreen
-                } else {
-                    Color(0xFFF1F1F1)
-                },
+                color = GroceryLightGreen,
                 shape = RoundedCornerShape(8.dp)
             )
             .padding(
@@ -1067,12 +1071,50 @@ private fun ProductTag(
             text = text,
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
-            color = if (enabled) {
-                GroceryGreen
-            } else {
-                GroceryGray
-            }
+            color = GroceryGreen
         )
+    }
+}
+
+@Composable
+private fun ProductImage(
+    imageUrl: String,
+    modifier: Modifier = Modifier
+) {
+
+    Box(
+        modifier = modifier
+            .background(
+                color = GroceryLightGreen,
+                shape = RoundedCornerShape(14.dp)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+
+        if (imageUrl.isNotBlank()) {
+
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = "Product image",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(4.dp)
+                    .background(
+                        Color.White,
+                        RoundedCornerShape(12.dp)
+                    ),
+                contentScale = ContentScale.Crop
+            )
+
+        } else {
+
+            Icon(
+                imageVector = Icons.Default.Image,
+                contentDescription = null,
+                tint = GroceryGreen,
+                modifier = Modifier.size(32.dp)
+            )
+        }
     }
 }
 
@@ -1100,40 +1142,36 @@ private fun AddEditGroceryDialog(
 
     var price by remember {
         mutableStateOf(
-            if (product != null) {
-                if (product.price == 0.0) {
-                    ""
-                } else {
-                    product.price.toString()
-                }
-            } else {
+            if (product?.price == 0.0 || product == null) {
                 ""
+            } else {
+                product.price.toString()
             }
         )
     }
 
     var discount by remember {
         mutableStateOf(
-            if (product != null) {
-                if (product.discount == 0.0) {
-                    ""
-                } else {
-                    product.discount.toString()
-                }
-            } else {
+            if (product?.discount == 0.0 || product == null) {
                 ""
+            } else {
+                product.discount.toString()
             }
         )
     }
 
     var stock by remember {
         mutableStateOf(
-            if (product != null) {
-                product.stock.toString()
-            } else {
+            if (product == null) {
                 ""
+            } else {
+                product.stock.toString()
             }
         )
+    }
+
+    var unit by remember {
+        mutableStateOf(product?.unit ?: "piece")
     }
 
     var description by remember {
@@ -1160,6 +1198,10 @@ private fun AddEditGroceryDialog(
         mutableStateOf(false)
     }
 
+    var unitExpanded by remember {
+        mutableStateOf(false)
+    }
+
     var isSaving by remember {
         mutableStateOf(false)
     }
@@ -1181,18 +1223,60 @@ private fun AddEditGroceryDialog(
         "Other"
     )
 
-    val priceValue = price.toDoubleOrNull() ?: 0.0
-    val discountValue = discount.toDoubleOrNull() ?: 0.0
+    val units = listOf(
+        "kg",
+        "g",
+        "piece",
+        "dozen",
+        "liter",
+        "ml",
+        "pack",
+        "box",
+        "bottle",
+        "bundle",
+        "gram",
+        "kilogram",
+        "pieces",
+        "liters",
+        "milliliters",
+        "packs",
+        "boxes",
+        "bottles",
+        "bundles",
+        "bag",
+        "can",
+        "jar",
+        "tray",
+        "pair",
+        "roll",
+        "bar",
+        "tube",
+        "sachet",
+        "other"
+    )
+
+    val priceValue =
+        price.toDoubleOrNull() ?: 0.0
+
+    val discountValue =
+        discount.toDoubleOrNull() ?: 0.0
+
+    val stockValue =
+        stock.toIntOrNull() ?: 0
 
     val calculatedPrice =
-        priceValue - (priceValue * discountValue / 100.0)
+        priceValue -
+                (priceValue * discountValue / 100.0)
 
     AlertDialog(
+
         onDismissRequest = {
+
             if (!isSaving) {
                 onDismiss()
             }
         },
+
         title = {
 
             Text(
@@ -1205,6 +1289,7 @@ private fun AddEditGroceryDialog(
                 color = GroceryDark
             )
         },
+
         text = {
 
             LazyColumn(
@@ -1257,6 +1342,7 @@ private fun AddEditGroceryDialog(
                     ExposedDropdownMenuBox(
                         expanded = categoryExpanded,
                         onExpandedChange = {
+
                             if (!isSaving) {
                                 categoryExpanded = !categoryExpanded
                             }
@@ -1309,6 +1395,7 @@ private fun AddEditGroceryDialog(
                                         Text(item)
                                     },
                                     onClick = {
+
                                         category = item
                                         categoryExpanded = false
                                     }
@@ -1328,10 +1415,14 @@ private fun AddEditGroceryDialog(
                         OutlinedTextField(
                             value = price,
                             onValueChange = {
+
                                 if (
                                     it.isEmpty() ||
-                                    it.matches(Regex("^\\d*(\\.\\d*)?$"))
+                                    it.matches(
+                                        Regex("^\\d*(\\.\\d*)?$")
+                                    )
                                 ) {
+
                                     price = it
                                     errorMessage = ""
                                 }
@@ -1349,6 +1440,7 @@ private fun AddEditGroceryDialog(
                                 keyboardType = KeyboardType.Decimal
                             ),
                             leadingIcon = {
+
                                 Text(
                                     text = "PKR",
                                     fontSize = 11.sp,
@@ -1365,10 +1457,14 @@ private fun AddEditGroceryDialog(
                         OutlinedTextField(
                             value = discount,
                             onValueChange = {
+
                                 if (
                                     it.isEmpty() ||
-                                    it.matches(Regex("^\\d*(\\.\\d*)?$"))
+                                    it.matches(
+                                        Regex("^\\d*(\\.\\d*)?$")
+                                    )
                                 ) {
+
                                     discount = it
                                     errorMessage = ""
                                 }
@@ -1396,68 +1492,109 @@ private fun AddEditGroceryDialog(
 
                 item {
 
-                    OutlinedTextField(
-                        value = stock,
-                        onValueChange = {
-                            if (
-                                it.isEmpty() ||
-                                it.all { character ->
-                                    character.isDigit()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+
+                        OutlinedTextField(
+                            value = stock,
+                            onValueChange = {
+
+                                if (it.isEmpty() || it.all { char -> char.isDigit() }) {
+                                    stock = it
+                                    errorMessage = ""
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = {
+                                Text("Stock Quantity")
+                            },
+                            placeholder = {
+                                Text("e.g. 50")
+                            },
+                            singleLine = true,
+                            enabled = !isSaving,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number
+                            ),
+                            leadingIcon = {
+
+                                Icon(
+                                    imageVector = Icons.Default.Inventory,
+                                    contentDescription = null,
+                                    tint = GroceryGreen
+                                )
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GroceryGreen,
+                                unfocusedBorderColor = Color(0xFFD6D6D6)
+                            )
+                        )
+
+                        ExposedDropdownMenuBox(
+                            expanded = unitExpanded,
+                            onExpandedChange = {
+
+                                if (!isSaving) {
+                                    unitExpanded = !unitExpanded
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+
+                            OutlinedTextField(
+                                value = unit,
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(),
+                                label = {
+                                    Text("Unit")
+                                },
+                                placeholder = {
+                                    Text("Select unit")
+                                },
+                                trailingIcon = {
+
+                                    ExposedDropdownMenuDefaults.TrailingIcon(
+                                        expanded = unitExpanded
+                                    )
+                                },
+                                enabled = !isSaving,
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GroceryGreen,
+                                    unfocusedBorderColor = Color(0xFFD6D6D6)
+                                )
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = unitExpanded,
+                                onDismissRequest = {
+                                    unitExpanded = false
                                 }
                             ) {
-                                stock = it
-                                errorMessage = ""
+
+                                units.forEach { item ->
+
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(item)
+                                        },
+                                        onClick = {
+
+                                            unit = item
+                                            unitExpanded = false
+                                        }
+                                    )
+                                }
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = {
-                            Text("Stock Quantity")
-                        },
-                        placeholder = {
-                            Text("50")
-                        },
-                        singleLine = true,
-                        enabled = !isSaving,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number
-                        ),
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Inventory,
-                                contentDescription = null
-                            )
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GroceryGreen,
-                            unfocusedBorderColor = Color(0xFFD6D6D6)
-                        )
-                    )
-                }
-
-                item {
-
-                    OutlinedTextField(
-                        value = imageUrl,
-                        onValueChange = {
-                            imageUrl = it
-                            errorMessage = ""
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = {
-                            Text("Image URL")
-                        },
-                        placeholder = {
-                            Text("https://example.com/apple.jpg")
-                        },
-                        singleLine = true,
-                        enabled = !isSaving,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GroceryGreen,
-                            unfocusedBorderColor = Color(0xFFD6D6D6)
-                        )
-                    )
+                        }
+                    }
                 }
 
                 item {
@@ -1465,6 +1602,7 @@ private fun AddEditGroceryDialog(
                     OutlinedTextField(
                         value = description,
                         onValueChange = {
+
                             description = it
                             errorMessage = ""
                         },
@@ -1485,6 +1623,141 @@ private fun AddEditGroceryDialog(
                             unfocusedBorderColor = Color(0xFFD6D6D6)
                         )
                     )
+                }
+
+                item {
+
+                    Text(
+                        text = "Product Image",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GroceryDark
+                    )
+                }
+
+                item {
+
+                    OutlinedTextField(
+                        value = imageUrl,
+                        onValueChange = {
+
+                            imageUrl = it
+                            errorMessage = ""
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = {
+                            Text("Image URL")
+                        },
+                        placeholder = {
+                            Text("Paste image URL here")
+                        },
+                        leadingIcon = {
+
+                            Icon(
+                                imageVector = Icons.Default.Link,
+                                contentDescription = null,
+                                tint = GroceryGreen
+                            )
+                        },
+                        singleLine = false,
+                        maxLines = 3,
+                        enabled = !isSaving,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GroceryGreen,
+                            unfocusedBorderColor = Color(0xFFD6D6D6)
+                        )
+                    )
+                }
+
+                item {
+
+                    if (imageUrl.isNotBlank()) {
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = GroceryLightGreen
+                            )
+                        ) {
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp)
+                            ) {
+
+                                Text(
+                                    text = "Image Preview",
+                                    fontWeight = FontWeight.Bold,
+                                    color = GroceryDark
+                                )
+
+                                Spacer(
+                                    modifier = Modifier.height(8.dp)
+                                )
+
+                                AsyncImage(
+                                    model = imageUrl,
+                                    contentDescription = "Image preview",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(160.dp)
+                                        .background(
+                                            Color.White,
+                                            RoundedCornerShape(12.dp)
+                                        ),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        }
+
+                    } else {
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = GroceryLightGreen
+                            )
+                        ) {
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+
+                                Icon(
+                                    imageVector = Icons.Default.Image,
+                                    contentDescription = null,
+                                    tint = GroceryGreen,
+                                    modifier = Modifier.size(32.dp)
+                                )
+
+                                Spacer(
+                                    modifier = Modifier.width(10.dp)
+                                )
+
+                                Column {
+
+                                    Text(
+                                        text = "No image added",
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = GroceryDark
+                                    )
+
+                                    Text(
+                                        text = "Paste an image URL above to preview it.",
+                                        fontSize = 11.sp,
+                                        color = GroceryGray
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 item {
@@ -1536,7 +1809,7 @@ private fun AddEditGroceryDialog(
                     )
                 }
 
-                if (priceValue > 0 && discountValue > 0) {
+                if (priceValue > 0.0 && discountValue > 0.0) {
 
                     item {
 
@@ -1587,6 +1860,52 @@ private fun AddEditGroceryDialog(
                     }
                 }
 
+                item {
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = GroceryLightGreen
+                        )
+                    ) {
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+
+                            Icon(
+                                imageVector = Icons.Default.Inventory,
+                                contentDescription = null,
+                                tint = GroceryGreen,
+                                modifier = Modifier.size(28.dp)
+                            )
+
+                            Spacer(
+                                modifier = Modifier.width(10.dp)
+                            )
+
+                            Column {
+
+                                Text(
+                                    text = "Current Stock",
+                                    fontWeight = FontWeight.Bold,
+                                    color = GroceryDark
+                                )
+
+                                Text(
+                                    text = "$stockValue $unit available",
+                                    fontSize = 12.sp,
+                                    color = GroceryGray
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (errorMessage.isNotBlank()) {
 
                     item {
@@ -1600,17 +1919,31 @@ private fun AddEditGroceryDialog(
                 }
             }
         },
+
         confirmButton = {
 
             Button(
+
                 onClick = {
 
-                    val cleanName = name.trim()
-                    val cleanCategory = category.trim()
-                    val cleanDescription = description.trim()
-                    val cleanImageUrl = imageUrl.trim()
+                    val cleanName =
+                        name.trim()
 
-                    val priceNumber = price.toDoubleOrNull()
+                    val cleanCategory =
+                        category.trim()
+
+                    val cleanDescription =
+                        description.trim()
+
+                    val cleanImageUrl =
+                        imageUrl.trim()
+
+                    val cleanUnit =
+                        unit.trim()
+
+                    val priceNumber =
+                        price.toDoubleOrNull()
+
                     val discountNumber =
                         if (discount.isBlank()) {
                             0.0
@@ -1618,35 +1951,53 @@ private fun AddEditGroceryDialog(
                             discount.toDoubleOrNull()
                         }
 
-                    val stockNumber = stock.toIntOrNull()
+                    val stockNumber =
+                        stock.toIntOrNull()
 
                     when {
 
                         cleanName.isBlank() -> {
-                            errorMessage = "Please enter a product name."
+
+                            errorMessage =
+                                "Please enter a product name."
                         }
 
                         cleanCategory.isBlank() -> {
-                            errorMessage = "Please select a category."
+
+                            errorMessage =
+                                "Please select a category."
                         }
 
-                        priceNumber == null || priceNumber <= 0 -> {
-                            errorMessage = "Please enter a valid price."
+                        priceNumber == null ||
+                                priceNumber <= 0.0 -> {
+
+                            errorMessage =
+                                "Please enter a valid price."
                         }
 
                         discountNumber == null ||
-                                discountNumber < 0 ||
-                                discountNumber > 100 -> {
+                                discountNumber < 0.0 ||
+                                discountNumber > 100.0 -> {
+
                             errorMessage =
                                 "Discount must be between 0 and 100."
                         }
 
-                        stockNumber == null || stockNumber < 0 -> {
+                        stockNumber == null ||
+                                stockNumber < 0 -> {
+
                             errorMessage =
                                 "Please enter a valid stock quantity."
                         }
 
+                        cleanUnit.isBlank() -> {
+
+                            errorMessage =
+                                "Please select a unit."
+                        }
+
                         cleanDescription.isBlank() -> {
+
                             errorMessage =
                                 "Please enter a product description."
                         }
@@ -1661,23 +2012,37 @@ private fun AddEditGroceryDialog(
 
                             val productData =
                                 hashMapOf<String, Any>(
+
                                     "name" to cleanName,
+
                                     "category" to cleanCategory,
+
                                     "price" to priceNumber,
+
                                     "discount" to discountNumber,
-                                    "description" to cleanDescription,
-                                    "imageUrl" to cleanImageUrl,
+
                                     "stock" to stockNumber,
+
+                                    "unit" to cleanUnit,
+
+                                    "description" to cleanDescription,
+
+                                    "imageUrl" to cleanImageUrl,
+
                                     "featured" to featured,
+
                                     "bestSeller" to bestSeller,
+
                                     "dailyOffer" to dailyOffer
                                 )
 
                             if (isEditing) {
 
-                                productData["updatedAt"] = currentTime
+                                productData["updatedAt"] =
+                                    currentTime
 
-                                firestore.collection("products")
+                                firestore
+                                    .collection("products")
                                     .document(product!!.id)
                                     .update(productData)
                                     .addOnSuccessListener {
@@ -1699,7 +2064,8 @@ private fun AddEditGroceryDialog(
                                 productData["createdAt"] =
                                     currentTime
 
-                                firestore.collection("products")
+                                firestore
+                                    .collection("products")
                                     .add(productData)
                                     .addOnSuccessListener {
 
@@ -1718,11 +2084,15 @@ private fun AddEditGroceryDialog(
                         }
                     }
                 },
+
                 enabled = !isSaving,
+
                 colors = ButtonDefaults.buttonColors(
                     containerColor = GroceryGreen
                 ),
+
                 shape = RoundedCornerShape(12.dp)
+
             ) {
 
                 if (isSaving) {
@@ -1732,6 +2102,12 @@ private fun AddEditGroceryDialog(
                         color = Color.White,
                         strokeWidth = 2.dp
                     )
+
+                    Spacer(
+                        modifier = Modifier.width(8.dp)
+                    )
+
+                    Text("Saving...")
 
                 } else {
 
@@ -1746,6 +2122,7 @@ private fun AddEditGroceryDialog(
                 }
             }
         },
+
         dismissButton = {
 
             TextButton(

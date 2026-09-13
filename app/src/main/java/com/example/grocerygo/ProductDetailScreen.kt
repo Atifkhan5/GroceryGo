@@ -1,11 +1,9 @@
 package com.example.grocerygo
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,87 +12,66 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Inventory
-import androidx.compose.material.icons.filled.LocalOffer
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.grocerygo.ui.theme.GroceryDark
 import com.example.grocerygo.ui.theme.GroceryGray
 import com.example.grocerygo.ui.theme.GroceryGreen
 import com.example.grocerygo.ui.theme.GroceryLightGreen
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import java.util.Locale
-
-private enum class SearchSortOption(
-    val title: String
-) {
-    RELEVANCE("Relevance"),
-    PRICE_LOW_TO_HIGH("Price: Low to High"),
-    PRICE_HIGH_TO_LOW("Price: High to Low"),
-    DISCOUNT_HIGH_TO_LOW("Highest Discount"),
-    NAME_A_TO_Z("Name: A-Z"),
-    NAME_Z_TO_A("Name: Z-A")
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchScreen(
-    onBackClick: () -> Unit = {},
-    onProductClick: (GroceryProduct) -> Unit = {},
-    onCartClick: () -> Unit = {}
+fun ProductDetailScreen(
+    productId: String,
+    onBackClick: () -> Unit,
+    onAddToCart: (GroceryProduct, Int) -> Unit
 ) {
 
     val firestore = remember {
         FirebaseFirestore.getInstance()
     }
 
-    var products by remember {
-        mutableStateOf<List<GroceryProduct>>(emptyList())
+    var product by remember {
+        mutableStateOf<GroceryProduct?>(null)
     }
 
     var isLoading by remember {
@@ -105,301 +82,68 @@ fun SearchScreen(
         mutableStateOf("")
     }
 
-    var searchQuery by remember {
-        mutableStateOf("")
+    var quantity by remember {
+        mutableIntStateOf(1)
     }
 
-    var selectedCategory by remember {
-        mutableStateOf("All")
-    }
-
-    var onlyInStock by remember {
+    var isFavorite by remember {
         mutableStateOf(false)
     }
 
-    var onlyDiscounted by remember {
-        mutableStateOf(false)
-    }
+    LaunchedEffect(productId) {
 
-    var selectedSort by remember {
-        mutableStateOf(SearchSortOption.RELEVANCE)
-    }
+        isLoading = true
+        errorMessage = ""
 
-    var showFilterDialog by remember {
-        mutableStateOf(false)
-    }
-
-    var showSortMenu by remember {
-        mutableStateOf(false)
-    }
-
-    var listenerRegistration by remember {
-        mutableStateOf<ListenerRegistration?>(null)
-    }
-
-    LaunchedEffect(Unit) {
-
-        listenerRegistration = firestore
+        firestore
             .collection("products")
-            .addSnapshotListener { snapshot, exception ->
+            .document(productId)
+            .get()
+            .addOnSuccessListener { document ->
 
-                if (exception != null) {
+                if (document.exists()) {
 
-                    errorMessage =
-                        exception.message
-                            ?: "Failed to load products."
+                    try {
 
-                    isLoading = false
-
-                    return@addSnapshotListener
-                }
-
-                products =
-                    snapshot?.documents
-                        ?.mapNotNull { document ->
-
-                            try {
-
-                                GroceryProduct(
-                                    id = document.id,
-                                    name =
-                                        document.getString(
-                                            "name"
-                                        ) ?: "",
-                                    category =
-                                        document.getString(
-                                            "category"
-                                        ) ?: "",
-                                    price =
-                                        document.getDouble(
-                                            "price"
-                                        ) ?: 0.0,
-                                    discount =
-                                        document.getDouble(
-                                            "discount"
-                                        ) ?: 0.0,
-                                    description =
-                                        document.getString(
-                                            "description"
-                                        ) ?: "",
-                                    imageUrl =
-                                        document.getString(
-                                            "imageUrl"
-                                        ) ?: "",
-                                    stock =
-                                        document.getLong(
-                                            "stock"
-                                        )?.toInt() ?: 0,
-                                    featured =
-                                        document.getBoolean(
-                                            "featured"
-                                        ) ?: false,
-                                    bestSeller =
-                                        document.getBoolean(
-                                            "bestSeller"
-                                        ) ?: false,
-                                    dailyOffer =
-                                        document.getBoolean(
-                                            "dailyOffer"
-                                        ) ?: false,
-                                    createdAt =
-                                        document.getLong(
-                                            "createdAt"
-                                        ) ?: 0L
-                                )
-
-                            } catch (
-                                e: Exception
-                            ) {
-
-                                null
-                            }
-                        }
-                        ?.sortedBy {
-                            it.name.lowercase(
-                                Locale.getDefault()
-                            )
-                        }
-                        ?: emptyList()
-
-                isLoading = false
-            }
-    }
-
-    DisposableEffect(Unit) {
-
-        onDispose {
-            listenerRegistration?.remove()
-        }
-    }
-
-    val categories =
-        products
-            .map {
-                it.category.trim()
-            }
-            .filter {
-                it.isNotBlank()
-            }
-            .distinct()
-            .sorted()
-
-    val normalizedQuery =
-        searchQuery.trim().lowercase(
-            Locale.getDefault()
-        )
-
-    var filteredProducts =
-        products.filter { product ->
-
-            val matchesSearch =
-
-                normalizedQuery.isBlank() ||
-
-                        product.name
-                            .lowercase(
-                                Locale.getDefault()
-                            )
-                            .contains(
-                                normalizedQuery
-                            ) ||
-
-                        product.category
-                            .lowercase(
-                                Locale.getDefault()
-                            )
-                            .contains(
-                                normalizedQuery
-                            ) ||
-
-                        product.description
-                            .lowercase(
-                                Locale.getDefault()
-                            )
-                            .contains(
-                                normalizedQuery
-                            )
-
-            val matchesCategory =
-                selectedCategory == "All" ||
-                        product.category.equals(
-                            selectedCategory,
-                            ignoreCase = true
+                        product = GroceryProduct(
+                            id = document.id,
+                            name = document.getString("name") ?: "",
+                            category = document.getString("category") ?: "",
+                            price = document.getDouble("price") ?: 0.0,
+                            discount = document.getDouble("discount") ?: 0.0,
+                            description = document.getString("description") ?: "",
+                            imageUrl = document.getString("imageUrl") ?: "",
+                            featured = document.getBoolean("featured") ?: false,
+                            bestSeller = document.getBoolean("bestSeller") ?: false,
+                            dailyOffer = document.getBoolean("dailyOffer") ?: false,
+                            unit = document.getString("unit") ?: "piece",
+                            stock = (document.get("stock") as? Number)?.toInt() ?: 0,
+                            createdAt = (document.get("createdAt") as? Number)?.toLong() ?: 0L
                         )
 
-            val matchesStock =
-                !onlyInStock ||
-                        product.stock > 0
+                    } catch (exception: Exception) {
 
-            val matchesDiscount =
-                !onlyDiscounted ||
-                        product.discount > 0
-
-            matchesSearch &&
-                    matchesCategory &&
-                    matchesStock &&
-                    matchesDiscount
-        }
-
-    filteredProducts =
-        when (selectedSort) {
-
-            SearchSortOption.RELEVANCE -> {
-
-                if (normalizedQuery.isBlank()) {
-
-                    filteredProducts.sortedBy {
-                        it.name.lowercase(
-                            Locale.getDefault()
-                        )
+                        errorMessage =
+                            exception.message
+                                ?: "Unable to read product details."
                     }
 
                 } else {
 
-                    filteredProducts.sortedWith(
-                        compareBy<GroceryProduct> {
-
-                            when {
-
-                                it.name
-                                    .equals(
-                                        searchQuery.trim(),
-                                        ignoreCase = true
-                                    ) -> 0
-
-                                it.name
-                                    .startsWith(
-                                        searchQuery.trim(),
-                                        ignoreCase = true
-                                    ) -> 1
-
-                                it.name.contains(
-                                    searchQuery.trim(),
-                                    ignoreCase = true
-                                ) -> 2
-
-                                it.category.contains(
-                                    searchQuery.trim(),
-                                    ignoreCase = true
-                                ) -> 3
-
-                                else -> 4
-                            }
-                        }.thenBy {
-                            it.name.lowercase(
-                                Locale.getDefault()
-                            )
-                        }
-                    )
+                    errorMessage = "Product does not exist."
                 }
+
+                isLoading = false
             }
+            .addOnFailureListener { exception ->
 
-            SearchSortOption.PRICE_LOW_TO_HIGH -> {
+                isLoading = false
 
-                filteredProducts.sortedBy {
-                    it.discountedPrice
-                }
+                errorMessage =
+                    exception.message
+                        ?: "Unable to load product."
             }
-
-            SearchSortOption.PRICE_HIGH_TO_LOW -> {
-
-                filteredProducts.sortedByDescending {
-                    it.discountedPrice
-                }
-            }
-
-            SearchSortOption.DISCOUNT_HIGH_TO_LOW -> {
-
-                filteredProducts.sortedByDescending {
-                    it.discount
-                }
-            }
-
-            SearchSortOption.NAME_A_TO_Z -> {
-
-                filteredProducts.sortedBy {
-                    it.name.lowercase(
-                        Locale.getDefault()
-                    )
-                }
-            }
-
-            SearchSortOption.NAME_Z_TO_A -> {
-
-                filteredProducts.sortedByDescending {
-                    it.name.lowercase(
-                        Locale.getDefault()
-                    )
-                }
-            }
-        }
-
-    val hasActiveFilters =
-        selectedCategory != "All" ||
-                onlyInStock ||
-                onlyDiscounted ||
-                selectedSort !=
-                SearchSortOption.RELEVANCE
+    }
 
     Scaffold(
 
@@ -408,10 +152,8 @@ fun SearchScreen(
             TopAppBar(
 
                 title = {
-
                     Text(
-                        text = "Search Groceries",
-                        fontSize = 21.sp,
+                        text = "Product Details",
                         fontWeight = FontWeight.Bold,
                         color = GroceryDark
                     )
@@ -424,26 +166,8 @@ fun SearchScreen(
                     ) {
 
                         Icon(
-                            imageVector =
-                                Icons.Default.ArrowBack,
-                            contentDescription =
-                                "Back",
-                            tint = GroceryDark
-                        )
-                    }
-                },
-
-                actions = {
-
-                    IconButton(
-                        onClick = onCartClick
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.FilterList,
-                            contentDescription =
-                                "Cart",
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back",
                             tint = GroceryDark
                         )
                     }
@@ -453,873 +177,495 @@ fun SearchScreen(
 
     ) { paddingValues ->
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Color(0xFFF8FAF8)
-                )
-                .padding(paddingValues)
-        ) {
+        if (isLoading) {
 
-            OutlinedTextField(
-
-                value = searchQuery,
-
-                onValueChange = {
-                    searchQuery = it
-                },
-
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 16.dp,
-                        vertical = 8.dp
-                    ),
-
-                placeholder = {
-
-                    Text(
-                        text =
-                            "Search by name, category..."
-                    )
-                },
-
-                leadingIcon = {
-
-                    Icon(
-                        imageVector =
-                            Icons.Default.Search,
-                        contentDescription =
-                            "Search",
-                        tint = GroceryGray
-                    )
-                },
-
-                trailingIcon = {
-
-                    if (
-                        searchQuery.isNotBlank()
-                    ) {
-
-                        IconButton(
-                            onClick = {
-                                searchQuery = ""
-                            }
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.Close,
-                                contentDescription =
-                                    "Clear search"
-                            )
-                        }
-                    }
-                },
-
-                singleLine = true,
-
-                shape =
-                    RoundedCornerShape(14.dp),
-
-                colors =
-                    OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor =
-                            GroceryGreen,
-                        unfocusedBorderColor =
-                            Color(0xFFD4D4D4),
-                        focusedContainerColor =
-                            Color.White,
-                        unfocusedContainerColor =
-                            Color.White
-                    )
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 16.dp
-                    ),
-                horizontalArrangement =
-                    Arrangement.spacedBy(8.dp)
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
             ) {
 
-                Box {
+                CircularProgressIndicator(
+                    color = GroceryGreen
+                )
+            }
 
-                    OutlinedButton(
-                        onClick = {
-                            showSortMenu = true
-                        },
-                        modifier =
-                            Modifier.height(42.dp)
-                    ) {
+            return@Scaffold
+        }
 
-                        Icon(
-                            imageVector =
-                                Icons.Default.Sort,
-                            contentDescription =
-                                null,
-                            modifier =
-                                Modifier.size(18.dp)
-                        )
+        if (errorMessage.isNotBlank()) {
 
-                        Spacer(
-                            modifier =
-                                Modifier.width(5.dp)
-                        )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
 
-                        Text(
-                            text =
-                                selectedSort.title,
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showSortMenu,
-                        onDismissRequest = {
-                            showSortMenu = false
-                        }
-                    ) {
-
-                        SearchSortOption.entries
-                            .forEach { option ->
-
-                                DropdownMenuItem(
-
-                                    text = {
-
-                                        Text(
-                                            text =
-                                                option.title
-                                        )
-                                    },
-
-                                    onClick = {
-
-                                        selectedSort =
-                                            option
-
-                                        showSortMenu =
-                                            false
-                                    }
-                                )
-                            }
-                    }
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        showFilterDialog = true
-                    },
-                    modifier =
-                        Modifier.height(42.dp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
 
-                    Icon(
-                        imageVector =
-                            Icons.Default.FilterList,
-                        contentDescription =
-                            null,
-                        modifier =
-                            Modifier.size(18.dp)
+                    Text(
+                        text = "Unable to Load Product",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GroceryDark
                     )
 
                     Spacer(
-                        modifier =
-                            Modifier.width(5.dp)
+                        modifier = Modifier.height(8.dp)
                     )
 
                     Text(
-                        text = "Filters",
-                        fontSize = 11.sp
+                        text = errorMessage,
+                        fontSize = 14.sp,
+                        color = GroceryGray,
+                        textAlign = TextAlign.Center
                     )
 
-                    if (hasActiveFilters) {
+                    Spacer(
+                        modifier = Modifier.height(20.dp)
+                    )
 
-                        Spacer(
-                            modifier =
-                                Modifier.width(5.dp)
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(
-                                    RoundedCornerShape(
-                                        50
-                                    )
-                                )
-                                .background(
-                                    GroceryGreen
-                                )
-                        )
-                    }
-                }
-            }
-
-            Spacer(
-                modifier = Modifier.height(8.dp)
-            )
-
-            if (categories.isNotEmpty()) {
-
-                LazyRow(
-                    contentPadding =
-                        PaddingValues(
-                            horizontal = 16.dp
+                    Button(
+                        onClick = onBackClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GroceryGreen
                         ),
-                    horizontalArrangement =
-                        Arrangement.spacedBy(8.dp)
-                ) {
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
 
-                    item {
-
-                        FilterChip(
-                            selected =
-                                selectedCategory ==
-                                        "All",
-                            onClick = {
-                                selectedCategory =
-                                    "All"
-                            },
-                            label = {
-                                Text("All")
-                            }
-                        )
-                    }
-
-                    items(
-                        items = categories
-                    ) { category ->
-
-                        FilterChip(
-                            selected =
-                                selectedCategory
-                                    .equals(
-                                        category,
-                                        ignoreCase =
-                                            true
-                                    ),
-                            onClick = {
-
-                                selectedCategory =
-                                    category
-                            },
-                            label = {
-
-                                Text(
-                                    text = category,
-                                    maxLines = 1,
-                                    overflow =
-                                        TextOverflow.Ellipsis
-                                )
-                            }
-                        )
+                        Text("Go Back")
                     }
                 }
             }
 
-            Spacer(
-                modifier = Modifier.height(8.dp)
-            )
+            return@Scaffold
+        }
 
-            if (hasActiveFilters) {
+        product?.let { groceryProduct ->
 
-                Row(
+            val discountedPrice =
+                groceryProduct.discountedPrice
+
+            val totalPrice =
+                discountedPrice * quantity
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFFF8FAF8))
+                    .padding(paddingValues)
+                    .verticalScroll(rememberScrollState())
+            ) {
+
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            horizontal = 16.dp
-                        ),
-                    verticalAlignment =
-                        Alignment.CenterVertically
+                        .height(300.dp)
+                        .background(GroceryLightGreen),
+                    contentAlignment = Alignment.Center
+                ) {
+
+                    if (groceryProduct.imageUrl.isNotBlank()) {
+
+                        AsyncImage(
+                            model = groceryProduct.imageUrl,
+                            contentDescription = groceryProduct.name,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            contentScale = ContentScale.Crop
+                        )
+
+                    } else {
+
+                        Icon(
+                            imageVector = Icons.Default.ShoppingCart,
+                            contentDescription = null,
+                            tint = GroceryGreen,
+                            modifier = Modifier.size(90.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            isFavorite = !isFavorite
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                            .background(
+                                Color.White,
+                                RoundedCornerShape(50)
+                            )
+                    ) {
+
+                        Icon(
+                            imageVector = if (isFavorite) {
+                                Icons.Default.Favorite
+                            } else {
+                                Icons.Default.FavoriteBorder
+                            },
+                            contentDescription = "Favorite",
+                            tint = if (isFavorite) {
+                                Color(0xFFD32F2F)
+                            } else {
+                                GroceryDark
+                            }
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
                 ) {
 
                     Text(
-                        text =
-                            "Filters applied",
-                        fontSize = 12.sp,
-                        color = GroceryGray,
-                        modifier =
-                            Modifier.weight(1f)
+                        text = groceryProduct.name,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GroceryDark
                     )
 
-                    TextButton(
-                        onClick = {
+                    Spacer(
+                        modifier = Modifier.height(6.dp)
+                    )
 
-                            selectedCategory =
-                                "All"
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
 
-                            onlyInStock =
-                                false
+                        Icon(
+                            imageVector = Icons.Default.Category,
+                            contentDescription = null,
+                            tint = GroceryGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
 
-                            onlyDiscounted =
-                                false
+                        Spacer(
+                            modifier = Modifier.width(5.dp)
+                        )
 
-                            selectedSort =
-                                SearchSortOption.RELEVANCE
-                        }
+                        Text(
+                            text = groceryProduct.category,
+                            fontSize = 14.sp,
+                            color = GroceryGray
+                        )
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(8.dp)
+                    )
+
+                    Text(
+                        text = "Sold per ${groceryProduct.unit}",
+                        fontSize = 13.sp,
+                        color = GroceryGray
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(16.dp)
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
 
                         Text(
-                            text = "Clear filters",
+                            text = String.format(
+                                Locale.US,
+                                "PKR %.0f",
+                                discountedPrice
+                            ),
+                            fontSize = 25.sp,
+                            fontWeight = FontWeight.Bold,
                             color = GroceryGreen
                         )
-                    }
-                }
-            }
 
-            when {
-
-                isLoading -> {
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize(),
-                        contentAlignment =
-                            Alignment.Center
-                    ) {
-
-                        CircularProgressIndicator(
-                            color = GroceryGreen
-                        )
-                    }
-                }
-
-                errorMessage.isNotBlank() -> {
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(30.dp),
-                        contentAlignment =
-                            Alignment.Center
-                    ) {
-
-                        Column(
-                            horizontalAlignment =
-                                Alignment.CenterHorizontally
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.Warning,
-                                contentDescription =
-                                    null,
-                                tint =
-                                    Color(0xFFD32F2F),
-                                modifier =
-                                    Modifier.size(55.dp)
-                            )
+                        if (groceryProduct.discount > 0) {
 
                             Spacer(
-                                modifier =
-                                    Modifier.height(12.dp)
+                                modifier = Modifier.width(10.dp)
                             )
 
                             Text(
-                                text =
-                                    "Unable to load products",
-                                fontSize = 19.sp,
-                                fontWeight =
-                                    FontWeight.Bold,
+                                text = String.format(
+                                    Locale.US,
+                                    "PKR %.0f",
+                                    groceryProduct.price
+                                ),
+                                fontSize = 14.sp,
+                                color = GroceryGray,
+                                textDecoration = TextDecoration.LineThrough
+                            )
+
+                            Spacer(
+                                modifier = Modifier.width(8.dp)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        Color(0xFFFFE5E5),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(
+                                        horizontal = 8.dp,
+                                        vertical = 5.dp
+                                    )
+                            ) {
+
+                                Text(
+                                    text = "${groceryProduct.discount.toInt()}% OFF",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFD32F2F)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(20.dp)
+                    )
+
+                    if (
+                        groceryProduct.featured ||
+                        groceryProduct.bestSeller ||
+                        groceryProduct.dailyOffer
+                    ) {
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+
+                            if (groceryProduct.featured) {
+                                ProductDetailTag(
+                                    text = "Featured"
+                                )
+                            }
+
+                            if (groceryProduct.bestSeller) {
+                                ProductDetailTag(
+                                    text = "Best Seller"
+                                )
+                            }
+
+                            if (groceryProduct.dailyOffer) {
+                                ProductDetailTag(
+                                    text = "Daily Offer"
+                                )
+                            }
+                        }
+
+                        Spacer(
+                            modifier = Modifier.height(20.dp)
+                        )
+                    }
+
+                    Text(
+                        text = "Description",
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GroceryDark
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(8.dp)
+                    )
+
+                    Text(
+                        text = groceryProduct.description,
+                        fontSize = 14.sp,
+                        lineHeight = 21.sp,
+                        color = GroceryGray
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(24.dp)
+                    )
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 2.dp
+                        )
+                    ) {
+
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+
+                            Text(
+                                text = "Quantity",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = GroceryDark
                             )
 
                             Spacer(
-                                modifier =
-                                    Modifier.height(6.dp)
+                                modifier = Modifier.height(6.dp)
                             )
 
                             Text(
-                                text =
-                                    errorMessage,
-                                fontSize = 12.sp,
-                                color =
-                                    GroceryGray
-                            )
-                        }
-                    }
-                }
-
-                products.isEmpty() -> {
-
-                    SearchEmptyState(
-                        title =
-                            "No products available",
-                        message =
-                            "The admin has not added any groceries yet."
-                    )
-                }
-
-                filteredProducts.isEmpty() -> {
-
-                    SearchEmptyState(
-                        title =
-                            "No matching products",
-                        message =
-                            "Try another search or remove some filters.",
-                        showClearButton = true,
-                        onClear = {
-
-                            searchQuery = ""
-
-                            selectedCategory =
-                                "All"
-
-                            onlyInStock =
-                                false
-
-                            onlyDiscounted =
-                                false
-
-                            selectedSort =
-                                SearchSortOption.RELEVANCE
-                        }
-                    )
-                }
-
-                else -> {
-
-                    LazyColumn(
-                        modifier =
-                            Modifier.fillMaxSize(),
-                        contentPadding =
-                            PaddingValues(
-                                top = 4.dp,
-                                bottom = 30.dp
-                            ),
-                        verticalArrangement =
-                            Arrangement.spacedBy(
-                                12.dp
-                            )
-                    ) {
-
-                        item {
-
-                            Text(
-                                text =
-                                    "${filteredProducts.size} product${if (filteredProducts.size == 1) "" else "s"} found",
-                                modifier =
-                                    Modifier.padding(
-                                        horizontal = 16.dp
-                                    ),
+                                text = "Available: ${groceryProduct.stock} ${groceryProduct.unit}",
                                 fontSize = 13.sp,
-                                color =
-                                    GroceryGray
-                            )
-                        }
-
-                        items(
-                            items =
-                                filteredProducts,
-                            key = {
-                                it.id
-                            }
-                        ) { product ->
-
-                            SearchProductCard(
-                                product = product,
-                                onClick = {
-                                    onProductClick(
-                                        product
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (showFilterDialog) {
-
-        FilterDialog(
-
-            onlyInStock =
-                onlyInStock,
-
-            onlyDiscounted =
-                onlyDiscounted,
-
-            onOnlyInStockChange = {
-                onlyInStock = it
-            },
-
-            onOnlyDiscountedChange = {
-                onlyDiscounted = it
-            },
-
-            onDismiss = {
-                showFilterDialog = false
-            },
-
-            onClear = {
-
-                onlyInStock = false
-                onlyDiscounted = false
-                selectedCategory = "All"
-                selectedSort =
-                    SearchSortOption.RELEVANCE
-
-                showFilterDialog = false
-            }
-        )
-    }
-}
-
-@Composable
-private fun SearchProductCard(
-    product: GroceryProduct,
-    onClick: () -> Unit
-) {
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                horizontal = 16.dp
-            )
-            .clickable {
-                onClick()
-            },
-        shape =
-            RoundedCornerShape(18.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    Color.White
-            ),
-        elevation =
-            CardDefaults.cardElevation(
-                defaultElevation = 2.dp
-            )
-    ) {
-
-        Row(
-            modifier =
-                Modifier.padding(12.dp),
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
-
-            SearchProductImage(
-                product = product
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.width(13.dp)
-            )
-
-            Column(
-                modifier =
-                    Modifier.weight(1f)
-            ) {
-
-                Text(
-                    text =
-                        product.name,
-                    fontSize = 17.sp,
-                    fontWeight =
-                        FontWeight.Bold,
-                    color =
-                        GroceryDark,
-                    maxLines = 1,
-                    overflow =
-                        TextOverflow.Ellipsis
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(4.dp)
-                )
-
-                Row(
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    Icon(
-                        imageVector =
-                            Icons.Default.Category,
-                        contentDescription =
-                            null,
-                        tint =
-                            GroceryGreen,
-                        modifier =
-                            Modifier.size(14.dp)
-                    )
-
-                    Spacer(
-                        modifier =
-                            Modifier.width(4.dp)
-                    )
-
-                    Text(
-                        text =
-                            product.category,
-                        fontSize = 11.sp,
-                        color =
-                            GroceryGray
-                    )
-                }
-
-                if (
-                    product.description
-                        .isNotBlank()
-                ) {
-
-                    Spacer(
-                        modifier =
-                            Modifier.height(5.dp)
-                    )
-
-                    Text(
-                        text =
-                            product.description,
-                        fontSize = 11.sp,
-                        color =
-                            GroceryGray,
-                        maxLines = 2,
-                        overflow =
-                            TextOverflow.Ellipsis
-                    )
-                }
-
-                Spacer(
-                    modifier =
-                        Modifier.height(8.dp)
-                )
-
-                Row(
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    Text(
-                        text =
-                            String.format(
-                                Locale.US,
-                                "PKR %.0f",
-                                product.discountedPrice
-                            ),
-                        fontSize = 15.sp,
-                        fontWeight =
-                            FontWeight.Bold,
-                        color =
-                            GroceryGreen
-                    )
-
-                    if (
-                        product.discount > 0
-                    ) {
-
-                        Spacer(
-                            modifier =
-                                Modifier.width(6.dp)
-                        )
-
-                        Text(
-                            text =
-                                String.format(
-                                    Locale.US,
-                                    "PKR %.0f",
-                                    product.price
-                                ),
-                            fontSize = 10.sp,
-                            color =
-                                GroceryGray
-                        )
-                    }
-                }
-
-                Spacer(
-                    modifier =
-                        Modifier.height(5.dp)
-                )
-
-                Row(
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    Text(
-                        text =
-                            if (
-                                product.stock > 0
-                            ) {
-                                "In stock"
-                            } else {
-                                "Out of stock"
-                            },
-                        fontSize = 10.sp,
-                        fontWeight =
-                            FontWeight.SemiBold,
-                        color =
-                            if (
-                                product.stock > 0
-                            ) {
-                                GroceryGreen
-                            } else {
-                                Color(0xFFD32F2F)
-                            }
-                    )
-
-                    if (
-                        product.discount > 0
-                    ) {
-
-                        Spacer(
-                            modifier =
-                                Modifier.width(8.dp)
-                        )
-
-                        Row(
-                            verticalAlignment =
-                                Alignment.CenterVertically
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.LocalOffer,
-                                contentDescription =
-                                    null,
-                                tint =
-                                    Color(0xFFD32F2F),
-                                modifier =
-                                    Modifier.size(
-                                        12.dp
-                                    )
+                                color = GroceryGray
                             )
 
                             Spacer(
-                                modifier =
-                                    Modifier.width(3.dp)
+                                modifier = Modifier.height(12.dp)
                             )
 
-                            Text(
-                                text =
-                                    "${product.discount.toInt()}% OFF",
-                                fontSize = 10.sp,
-                                fontWeight =
-                                    FontWeight.Bold,
-                                color =
-                                    Color(0xFFD32F2F)
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+
+                                IconButton(
+                                    onClick = {
+                                        if (quantity > 1) {
+                                            quantity--
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .background(
+                                            GroceryLightGreen,
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                ) {
+
+                                    Icon(
+                                        imageVector = Icons.Default.Remove,
+                                        contentDescription = "Decrease",
+                                        tint = GroceryGreen
+                                    )
+                                }
+
+                                Text(
+                                    text = quantity.toString(),
+                                    modifier = Modifier.width(50.dp),
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GroceryDark,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                IconButton(
+                                    onClick = {
+                                        if (quantity < groceryProduct.stock) {
+                                            quantity++
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .background(
+                                            GroceryLightGreen,
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                ) {
+
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Increase",
+                                        tint = if (
+                                            quantity < groceryProduct.stock
+                                        ) {
+                                            GroceryGreen
+                                        } else {
+                                            GroceryGray
+                                        }
+                                    )
+                                }
+
+                                Spacer(
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Column(
+                                    horizontalAlignment = Alignment.End
+                                ) {
+
+                                    Text(
+                                        text = "Total",
+                                        fontSize = 12.sp,
+                                        color = GroceryGray
+                                    )
+
+                                    Text(
+                                        text = String.format(
+                                            Locale.US,
+                                            "PKR %.0f",
+                                            totalPrice
+                                        ),
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = GroceryGreen
+                                    )
+                                }
+                            }
                         }
                     }
-                }
-            }
-        }
-    }
-}
 
-@Composable
-private fun SearchProductImage(
-    product: GroceryProduct
-) {
+                    Spacer(
+                        modifier = Modifier.height(20.dp)
+                    )
 
-    Box(
-        modifier = Modifier
-            .size(100.dp)
-            .clip(
-                RoundedCornerShape(14.dp)
-            )
-            .background(
-                GroceryLightGreen
-            ),
-        contentAlignment =
-            Alignment.Center
-    ) {
+                    Button(
+                        onClick = {
 
-        Icon(
-            imageVector =
-                Icons.Default.Inventory,
-            contentDescription =
-                product.name,
-            tint =
-                GroceryGreen,
-            modifier =
-                Modifier.size(42.dp)
-        )
-    }
-}
+                            if (groceryProduct.stock > 0) {
 
-@Composable
-private fun SearchEmptyState(
-    title: String,
-    message: String,
-    showClearButton: Boolean = false,
-    onClear: () -> Unit = {}
-) {
+                                onAddToCart(
+                                    groceryProduct,
+                                    quantity
+                                )
+                            }
+                        },
+                        enabled = groceryProduct.stock > 0,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GroceryGreen,
+                            disabledContainerColor = Color(0xFFCBD5E1)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
 
-    Box(
-        modifier =
-            Modifier.fillMaxSize(),
-        contentAlignment =
-            Alignment.Center
-    ) {
+                        Icon(
+                            imageVector = Icons.Default.ShoppingCart,
+                            contentDescription = null
+                        )
 
-        Column(
-            modifier =
-                Modifier.padding(30.dp),
-            horizontalAlignment =
-                Alignment.CenterHorizontally
-        ) {
+                        Spacer(
+                            modifier = Modifier.width(10.dp)
+                        )
 
-            Icon(
-                imageVector =
-                    Icons.Default.Search,
-                contentDescription =
-                    null,
-                tint =
-                    GroceryGreen,
-                modifier =
-                    Modifier.size(60.dp)
-            )
+                        Text(
+                            text = if (groceryProduct.stock > 0) {
+                                "Add to Cart"
+                            } else {
+                                "Out of Stock"
+                            },
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
-            Spacer(
-                modifier =
-                    Modifier.height(14.dp)
-            )
-
-            Text(
-                text = title,
-                fontSize = 20.sp,
-                fontWeight =
-                    FontWeight.Bold,
-                color = GroceryDark
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(7.dp)
-            )
-
-            Text(
-                text = message,
-                fontSize = 12.sp,
-                color = GroceryGray
-            )
-
-            if (showClearButton) {
-
-                Spacer(
-                    modifier =
-                        Modifier.height(15.dp)
-                )
-
-                Button(
-                    onClick = onClear
-                ) {
-
-                    Text(
-                        text = "Clear Search & Filters"
+                    Spacer(
+                        modifier = Modifier.height(30.dp)
                     )
                 }
             }
@@ -1328,130 +674,27 @@ private fun SearchEmptyState(
 }
 
 @Composable
-private fun FilterDialog(
-    onlyInStock: Boolean,
-    onlyDiscounted: Boolean,
-    onOnlyInStockChange: (Boolean) -> Unit,
-    onOnlyDiscountedChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit,
-    onClear: () -> Unit
+private fun ProductDetailTag(
+    text: String
 ) {
 
-    AlertDialog(
+    Box(
+        modifier = Modifier
+            .background(
+                GroceryLightGreen,
+                RoundedCornerShape(8.dp)
+            )
+            .padding(
+                horizontal = 10.dp,
+                vertical = 6.dp
+            )
+    ) {
 
-        onDismissRequest = onDismiss,
-
-        title = {
-
-            Row(
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Default.FilterList,
-                    contentDescription =
-                        null,
-                    tint =
-                        GroceryGreen
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.width(8.dp)
-                )
-
-                Text(
-                    text = "Filters",
-                    fontWeight =
-                        FontWeight.Bold
-                )
-            }
-        },
-
-        text = {
-
-            Column {
-
-                Text(
-                    text =
-                        "Availability & Offers",
-                    fontSize = 14.sp,
-                    fontWeight =
-                        FontWeight.Bold,
-                    color =
-                        GroceryDark
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(10.dp)
-                )
-
-                FilterChip(
-                    selected =
-                        onlyInStock,
-                    onClick = {
-                        onOnlyInStockChange(
-                            !onlyInStock
-                        )
-                    },
-                    label = {
-                        Text(
-                            text =
-                                "Only show in-stock products"
-                        )
-                    }
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(8.dp)
-                )
-
-                FilterChip(
-                    selected =
-                        onlyDiscounted,
-                    onClick = {
-                        onOnlyDiscountedChange(
-                            !onlyDiscounted
-                        )
-                    },
-                    label = {
-                        Text(
-                            text =
-                                "Only show discounted products"
-                        )
-                    }
-                )
-            }
-        },
-
-        confirmButton = {
-
-            TextButton(
-                onClick = onDismiss
-            ) {
-
-                Text(
-                    text = "Done",
-                    color = GroceryGreen
-                )
-            }
-        },
-
-        dismissButton = {
-
-            TextButton(
-                onClick = onClear
-            ) {
-
-                Text(
-                    text = "Clear",
-                    color = GroceryGray
-                )
-            }
-        }
-    )
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = GroceryGreen
+        )
+    }
 }

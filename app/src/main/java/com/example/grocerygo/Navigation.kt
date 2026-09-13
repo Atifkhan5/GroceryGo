@@ -1,12 +1,13 @@
 package com.example.grocerygo
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -22,11 +23,12 @@ import androidx.compose.ui.Modifier
 
 private enum class NavigationTab {
     HOME,
-    SEARCH,
+    PRODUCTS,
     CART,
     ORDERS,
     ADMIN,
-    PROFILE
+    PROFILE,
+    CHECKOUT
 }
 
 @Composable
@@ -38,142 +40,203 @@ fun GroceryNavigation(
         mutableStateOf(NavigationTab.HOME)
     }
 
+    var selectedProductId by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            if (selectedTab != NavigationTab.CHECKOUT && selectedProductId == null) {
+                NavigationBar {
 
-                NavigationBarItem(
-                    selected = selectedTab == NavigationTab.HOME,
-                    onClick = {
-                        selectedTab = NavigationTab.HOME
-                    },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Home,
-                            contentDescription = "Home"
-                        )
-                    },
-                    label = {
-                        Text("Home")
-                    }
-                )
-
-                NavigationBarItem(
-                    selected = selectedTab == NavigationTab.SEARCH,
-                    onClick = {
-                        selectedTab = NavigationTab.SEARCH
-                    },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search"
-                        )
-                    },
-                    label = {
-                        Text("Search")
-                    }
-                )
-
-                NavigationBarItem(
-                    selected = selectedTab == NavigationTab.CART,
-                    onClick = {
-                        selectedTab = NavigationTab.CART
-                    },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.ShoppingCart,
-                            contentDescription = "Cart"
-                        )
-                    },
-                    label = {
-                        Text("Cart")
-                    }
-                )
-
-                NavigationBarItem(
-                    selected = selectedTab == NavigationTab.ORDERS,
-                    onClick = {
-                        selectedTab = NavigationTab.ORDERS
-                    },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.ReceiptLong,
-                            contentDescription = "Orders"
-                        )
-                    },
-                    label = {
-                        Text("Orders")
-                    }
-                )
-
-                if (isAdmin) {
                     NavigationBarItem(
-                        selected = selectedTab == NavigationTab.ADMIN,
+                        selected = selectedTab == NavigationTab.HOME,
                         onClick = {
-                            selectedTab = NavigationTab.ADMIN
+                            selectedTab = NavigationTab.HOME
                         },
                         icon = {
                             Icon(
-                                imageVector = Icons.Default.AdminPanelSettings,
-                                contentDescription = "Admin"
+                                imageVector = Icons.Default.Home,
+                                contentDescription = "Home"
                             )
                         },
                         label = {
-                            Text("Admin")
+                            Text("Home")
+                        }
+                    )
+
+                    NavigationBarItem(
+                        selected = selectedTab == NavigationTab.PRODUCTS,
+                        onClick = {
+                            selectedTab = NavigationTab.PRODUCTS
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.ShoppingBag,
+                                contentDescription = "Products"
+                            )
+                        },
+                        label = {
+                            Text("Products")
+                        }
+                    )
+
+                    NavigationBarItem(
+                        selected = selectedTab == NavigationTab.CART,
+                        onClick = {
+                            selectedTab = NavigationTab.CART
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.ShoppingCart,
+                                contentDescription = "Cart"
+                            )
+                        },
+                        label = {
+                            Text("Cart")
+                        }
+                    )
+
+                    NavigationBarItem(
+                        selected = selectedTab == NavigationTab.ORDERS,
+                        onClick = {
+                            selectedTab = NavigationTab.ORDERS
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.ReceiptLong,
+                                contentDescription = "Orders"
+                            )
+                        },
+                        label = {
+                            Text("Orders")
+                        }
+                    )
+
+                    if (isAdmin) {
+                        NavigationBarItem(
+                            selected = selectedTab == NavigationTab.ADMIN,
+                            onClick = {
+                                selectedTab = NavigationTab.ADMIN
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.AdminPanelSettings,
+                                    contentDescription = "Admin"
+                                )
+                            },
+                            label = {
+                                Text("Admin")
+                            }
+                        )
+                    }
+
+                    NavigationBarItem(
+                        selected = selectedTab == NavigationTab.PROFILE,
+                        onClick = {
+                            selectedTab = NavigationTab.PROFILE
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Profile"
+                            )
+                        },
+                        label = {
+                            Text("Profile")
                         }
                     )
                 }
-
-                NavigationBarItem(
-                    selected = selectedTab == NavigationTab.PROFILE,
-                    onClick = {
-                        selectedTab = NavigationTab.PROFILE
-                    },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Profile"
-                        )
-                    },
-                    label = {
-                        Text("Profile")
-                    }
-                )
             }
         }
     ) { paddingValues ->
 
-        when (selectedTab) {
+        Box(
+            modifier = Modifier.padding(paddingValues)
+        ) {
+            when (selectedTab) {
 
-            NavigationTab.HOME -> {
-                HomeScreen( )
-            }
+                NavigationTab.HOME -> {
+                    HomeScreen(
+                        onProductClick = { product ->
+                            selectedProductId = product.id
+                        },
+                        onSearchClick = {
+                            selectedTab = NavigationTab.PRODUCTS
+                        },
+                        onProfileClick = {
+                            selectedTab = NavigationTab.PROFILE
+                        },
+                        onCartClick = {
+                            selectedTab = NavigationTab.CART
+                        }
+                    )
+                }
 
-            NavigationTab.SEARCH -> {
-                SearchScreen( )
-            }
+                NavigationTab.PRODUCTS -> {
+                    SearchScreen(
+                        onProductClick = { product ->
+                            selectedProductId = product.id
+                        }
+                    )
+                }
 
-            NavigationTab.CART -> {
-                CartScreen(
-                    modifier = Modifier.padding(paddingValues)
-                )
-            }
+                NavigationTab.CART -> {
+                    CartScreen(
+                        onCheckoutClick = {
+                            selectedTab = NavigationTab.CHECKOUT
+                        }
+                    )
+                }
 
-            NavigationTab.ORDERS -> {
-                OrderScreen( )
-            }
+                NavigationTab.ORDERS -> {
+                    OrderScreen()
+                }
 
-            NavigationTab.ADMIN -> {
-                AdminScreen(
-                    onBackClick = {
+                NavigationTab.ADMIN -> {
+                    if (isAdmin) {
+                        AdminScreen(
+                            onBackClick = {
+                                selectedTab = NavigationTab.HOME
+                            },
+                            onLogout = onLogout
+                        )
+                    } else {
                         selectedTab = NavigationTab.HOME
-                    },
-                    onLogout = onLogout
-                )
+                    }
+                }
+
+                NavigationTab.PROFILE -> {
+                    ProfileScreen(
+                        onLogout = onLogout
+                    )
+                }
+
+                NavigationTab.CHECKOUT -> {
+                    CheckoutScreen(
+                        onBackClick = {
+                            selectedTab = NavigationTab.CART
+                        },
+                        onOrderPlaced = {
+                            CartManager.clearCart()
+                            selectedTab = NavigationTab.ORDERS
+                        }
+                    )
+                }
             }
 
-            NavigationTab.PROFILE -> {
-                ProfileScreen( )
+            selectedProductId?.let { id ->
+                ProductDetailScreen(
+                    productId = id,
+                    onBackClick = {
+                        selectedProductId = null
+                    },
+                    onAddToCart = { product, quantity ->
+                        CartManager.addToCart(product, quantity)
+                        selectedProductId = null
+                        selectedTab = NavigationTab.CART
+                    }
+                )
             }
         }
     }

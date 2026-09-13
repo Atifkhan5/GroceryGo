@@ -1,7 +1,9 @@
 package com.example.grocerygo
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -34,7 +35,6 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -122,10 +122,6 @@ fun ProfileScreen(
         mutableStateOf(false)
     }
 
-    var isDeleting by remember {
-        mutableStateOf(false)
-    }
-
     var errorMessage by remember {
         mutableStateOf("")
     }
@@ -138,11 +134,11 @@ fun ProfileScreen(
         mutableStateOf(false)
     }
 
-    var showDeleteDialog by remember {
+    var showLogoutDialog by remember {
         mutableStateOf(false)
     }
 
-    var showLogoutDialog by remember {
+    var showSecurityDialog by remember {
         mutableStateOf(false)
     }
 
@@ -150,8 +146,68 @@ fun ProfileScreen(
         mutableStateOf<ListenerRegistration?>(null)
     }
 
+    fun loadProfile() {
+        val user = auth.currentUser
+
+        if (user == null) {
+            isLoading = false
+            profile = null
+            errorMessage = "Please log in to view your profile."
+            return
+        }
+
+        isLoading = true
+        errorMessage = ""
+
+        firestore
+            .collection("users")
+            .document(user.uid)
+            .get()
+            .addOnSuccessListener { document ->
+
+                if (document.exists()) {
+                    profile = GroceryUserProfile(
+                        uid = user.uid,
+                        fullName = document.getString("fullName")
+                            ?: user.displayName
+                            ?: "",
+                        email = document.getString("email")
+                            ?: user.email
+                            ?: "",
+                        phone = document.getString("phone")
+                            ?: "",
+                        role = document.getString("role")
+                            ?: "user",
+                        accountType = document.getString("accountType")
+                            ?: "Personal",
+                        accountStatus = document.getString("accountStatus")
+                            ?: "Active"
+                    )
+                } else {
+                    profile = GroceryUserProfile(
+                        uid = user.uid,
+                        fullName = user.displayName ?: "",
+                        email = user.email ?: "",
+                        phone = "",
+                        role = "user",
+                        accountType = "Personal",
+                        accountStatus = "Active"
+                    )
+                }
+
+                isLoading = false
+            }
+            .addOnFailureListener { exception ->
+                isLoading = false
+                errorMessage =
+                    exception.message ?: "Unable to load profile."
+            }
+    }
+
     LaunchedEffect(currentUser?.uid) {
-        if (currentUser == null) {
+        val user = auth.currentUser
+
+        if (user == null) {
             isLoading = false
             errorMessage = "Please log in to view your profile."
             return@LaunchedEffect
@@ -159,27 +215,29 @@ fun ProfileScreen(
 
         listenerRegistration = firestore
             .collection("users")
-            .document(currentUser.uid)
+            .document(user.uid)
             .addSnapshotListener { snapshot, exception ->
 
                 if (exception != null) {
+                    isLoading = false
                     errorMessage =
                         exception.message ?: "Unable to load profile."
-                    isLoading = false
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null && snapshot.exists()) {
                     profile = GroceryUserProfile(
-                        uid = currentUser.uid,
+                        uid = user.uid,
                         fullName = snapshot.getString("fullName")
-                            ?: currentUser.displayName
+                            ?: user.displayName
                             ?: "",
                         email = snapshot.getString("email")
-                            ?: currentUser.email
+                            ?: user.email
                             ?: "",
-                        phone = snapshot.getString("phone") ?: "",
-                        role = snapshot.getString("role") ?: "user",
+                        phone = snapshot.getString("phone")
+                            ?: "",
+                        role = snapshot.getString("role")
+                            ?: "user",
                         accountType = snapshot.getString("accountType")
                             ?: "Personal",
                         accountStatus = snapshot.getString("accountStatus")
@@ -187,9 +245,9 @@ fun ProfileScreen(
                     )
                 } else {
                     profile = GroceryUserProfile(
-                        uid = currentUser.uid,
-                        fullName = currentUser.displayName ?: "",
-                        email = currentUser.email ?: "",
+                        uid = user.uid,
+                        fullName = user.displayName ?: "",
+                        email = user.email ?: "",
                         phone = "",
                         role = "user",
                         accountType = "Personal",
@@ -207,6 +265,26 @@ fun ProfileScreen(
             listenerRegistration?.remove()
             listenerRegistration = null
         }
+    }
+
+    fun logoutAndOpenMainActivity() {
+        listenerRegistration?.remove()
+        listenerRegistration = null
+
+        auth.signOut()
+
+        val intent = Intent(
+            context,
+            MainActivity::class.java
+        ).apply {
+            flags =
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+
+        context.startActivity(intent)
+
+        onLogout()
     }
 
     Scaffold(
@@ -234,47 +312,7 @@ fun ProfileScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            if (currentUser == null) {
-                                errorMessage = "Please log in again."
-                                return@IconButton
-                            }
-
-                            isLoading = true
-                            errorMessage = ""
-
-                            firestore
-                                .collection("users")
-                                .document(currentUser.uid)
-                                .get()
-                                .addOnSuccessListener { document ->
-                                    if (document.exists()) {
-                                        profile = GroceryUserProfile(
-                                            uid = currentUser.uid,
-                                            fullName = document.getString("fullName")
-                                                ?: currentUser.displayName
-                                                ?: "",
-                                            email = document.getString("email")
-                                                ?: currentUser.email
-                                                ?: "",
-                                            phone = document.getString("phone")
-                                                ?: "",
-                                            role = document.getString("role")
-                                                ?: "user",
-                                            accountType = document.getString("accountType")
-                                                ?: "Personal",
-                                            accountStatus = document.getString("accountStatus")
-                                                ?: "Active"
-                                        )
-                                    }
-
-                                    isLoading = false
-                                }
-                                .addOnFailureListener { exception ->
-                                    isLoading = false
-                                    errorMessage =
-                                        exception.message
-                                            ?: "Unable to refresh profile."
-                                }
+                            loadProfile()
                         }
                     ) {
                         Icon(
@@ -308,48 +346,7 @@ fun ProfileScreen(
                     paddingValues = paddingValues,
                     message = errorMessage,
                     onRetry = {
-                        isLoading = true
-                        errorMessage = ""
-
-                        currentUser?.uid?.let { uid ->
-                            firestore
-                                .collection("users")
-                                .document(uid)
-                                .get()
-                                .addOnSuccessListener { document ->
-
-                                    if (document.exists()) {
-                                        profile = GroceryUserProfile(
-                                            uid = uid,
-                                            fullName = document.getString("fullName")
-                                                ?: currentUser.displayName
-                                                ?: "",
-                                            email = document.getString("email")
-                                                ?: currentUser.email
-                                                ?: "",
-                                            phone = document.getString("phone")
-                                                ?: "",
-                                            role = document.getString("role")
-                                                ?: "user",
-                                            accountType = document.getString("accountType")
-                                                ?: "Personal",
-                                            accountStatus = document.getString("accountStatus")
-                                                ?: "Active"
-                                        )
-                                    }
-
-                                    isLoading = false
-                                }
-                                .addOnFailureListener { exception ->
-                                    isLoading = false
-                                    errorMessage =
-                                        exception.message
-                                            ?: "Unable to load profile."
-                                }
-                        } ?: run {
-                            isLoading = false
-                            errorMessage = "Please log in again."
-                        }
+                        loadProfile()
                     }
                 )
             }
@@ -368,11 +365,11 @@ fun ProfileScreen(
                         showPasswordDialog = true
                     },
                     onOrdersClick = onOrdersClick,
+                    onAccountSecurity = {
+                        showSecurityDialog = true
+                    },
                     onLogout = {
                         showLogoutDialog = true
-                    },
-                    onDeleteAccount = {
-                        showDeleteDialog = true
                     }
                 )
             }
@@ -391,9 +388,11 @@ fun ProfileScreen(
                     showEditDialog = false
                 }
             },
-            onSave = { fullName: String, phone: String ->
+            onSave = { fullName, phone ->
 
-                if (currentUser == null) {
+                val user = auth.currentUser
+
+                if (user == null) {
                     errorMessage = "Please log in again."
                     return@EditProfileDialog
                 }
@@ -407,7 +406,7 @@ fun ProfileScreen(
 
                 firestore
                     .collection("users")
-                    .document(currentUser.uid)
+                    .document(user.uid)
                     .update(updates)
                     .addOnSuccessListener {
 
@@ -440,33 +439,37 @@ fun ProfileScreen(
                     showPasswordDialog = false
                 }
             },
-            onChangePassword = { currentPassword: String, newPassword: String ->
+            onChangePassword = { currentPassword, newPassword ->
 
-                if (currentUser == null) {
+                val user = auth.currentUser
+
+                if (user == null) {
                     errorMessage = "Please log in again."
                     return@ChangePasswordDialog
                 }
 
-                val email = currentUser.email
+                val email = user.email
 
                 if (email.isNullOrBlank()) {
                     errorMessage =
                         "Password change is only available for email/password accounts."
+
                     return@ChangePasswordDialog
                 }
 
                 isSaving = true
 
-                val credential = EmailAuthProvider.getCredential(
-                    email,
-                    currentPassword
-                )
+                val credential =
+                    EmailAuthProvider.getCredential(
+                        email,
+                        currentPassword
+                    )
 
-                currentUser
+                user
                     .reauthenticate(credential)
                     .addOnSuccessListener {
 
-                        currentUser
+                        user
                             .updatePassword(newPassword)
                             .addOnSuccessListener {
 
@@ -491,8 +494,25 @@ fun ProfileScreen(
                     .addOnFailureListener {
 
                         isSaving = false
-                        errorMessage = "Current password is incorrect."
+                        errorMessage =
+                            "Current password is incorrect."
                     }
+            }
+        )
+    }
+
+    if (showSecurityDialog) {
+        AccountSecurityDialog(
+            profile = profile
+                ?: GroceryUserProfile(
+                    email = currentUser?.email ?: ""
+                ),
+            onDismiss = {
+                showSecurityDialog = false
+            },
+            onChangePassword = {
+                showSecurityDialog = false
+                showPasswordDialog = true
             }
         )
     }
@@ -524,9 +544,8 @@ fun ProfileScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        auth.signOut()
                         showLogoutDialog = false
-                        onLogout()
+                        logoutAndOpenMainActivity()
                     }
                 ) {
                     Text(
@@ -549,61 +568,6 @@ fun ProfileScreen(
             }
         )
     }
-
-    if (showDeleteDialog) {
-        DeleteAccountDialog(
-            isDeleting = isDeleting,
-            onDismiss = {
-                if (!isDeleting) {
-                    showDeleteDialog = false
-                }
-            },
-            onDelete = {
-
-                if (currentUser == null) {
-                    errorMessage = "Please log in again."
-                    return@DeleteAccountDialog
-                }
-
-                isDeleting = true
-
-                val uid = currentUser.uid
-
-                firestore
-                    .collection("users")
-                    .document(uid)
-                    .delete()
-                    .addOnSuccessListener {
-
-                        currentUser
-                            .delete()
-                            .addOnSuccessListener {
-
-                                isDeleting = false
-                                showDeleteDialog = false
-
-                                onLogout()
-                            }
-                            .addOnFailureListener { exception ->
-
-                                isDeleting = false
-
-                                errorMessage =
-                                    exception.message
-                                        ?: "Unable to delete authentication account. Please log in again and retry."
-                            }
-                    }
-                    .addOnFailureListener { exception ->
-
-                        isDeleting = false
-
-                        errorMessage =
-                            exception.message
-                                ?: "Unable to delete account."
-                    }
-            }
-        )
-    }
 }
 
 @Composable
@@ -613,8 +577,8 @@ private fun ProfileContent(
     onEditProfile: () -> Unit,
     onChangePassword: () -> Unit,
     onOrdersClick: () -> Unit,
-    onLogout: () -> Unit,
-    onDeleteAccount: () -> Unit
+    onAccountSecurity: () -> Unit,
+    onLogout: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -683,8 +647,8 @@ private fun ProfileContent(
             ProfileOption(
                 icon = Icons.Default.Security,
                 title = "Account Security",
-                subtitle = "Your account is protected by Firebase Authentication",
-                onClick = {}
+                subtitle = "View your account authentication and security status",
+                onClick = onAccountSecurity
             )
         }
 
@@ -719,33 +683,6 @@ private fun ProfileContent(
                     text = "Logout",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        item {
-            OutlinedButton(
-                onClick = onDeleteAccount,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .height(50.dp),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = null,
-                    tint = Color(0xFFD32F2F)
-                )
-
-                Spacer(
-                    modifier = Modifier.width(8.dp)
-                )
-
-                Text(
-                    text = "Delete Account",
-                    color = Color(0xFFD32F2F),
-                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
@@ -866,7 +803,7 @@ private fun ProfileHeader(
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = Color.White
                 ),
-                border = androidx.compose.foundation.BorderStroke(
+                border = BorderStroke(
                     1.dp,
                     Color.White.copy(alpha = 0.7f)
                 ),
@@ -1532,62 +1469,130 @@ private fun PasswordField(
 }
 
 @Composable
-private fun DeleteAccountDialog(
-    isDeleting: Boolean,
+private fun AccountSecurityDialog(
+    profile: GroceryUserProfile,
     onDismiss: () -> Unit,
-    onDelete: () -> Unit
+    onChangePassword: () -> Unit
 ) {
+    val auth = remember {
+        FirebaseAuth.getInstance()
+    }
+
+    val user = auth.currentUser
+
+    val providers = user
+        ?.providerData
+        ?.filter {
+            it.providerId != "firebase"
+        }
+        ?.map {
+            when (it.providerId) {
+                EmailAuthProvider.PROVIDER_ID -> "Email & Password"
+                "google.com" -> "Google"
+                "phone" -> "Phone"
+                else -> it.providerId
+            }
+        }
+        ?.distinct()
+        ?: emptyList()
+
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
             Icon(
-                imageVector = Icons.Default.Warning,
+                imageVector = Icons.Default.Security,
                 contentDescription = null,
-                tint = Color(0xFFD32F2F),
-                modifier = Modifier.size(30.dp)
+                tint = GroceryGreen,
+                modifier = Modifier.size(32.dp)
             )
         },
         title = {
             Text(
-                text = "Delete Account?"
+                text = "Account Security",
+                fontWeight = FontWeight.Bold
             )
         },
         text = {
-            Text(
-                text = "This will permanently delete your GroceryGo profile. This action cannot be undone."
-            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SecurityStatusRow(
+                    title = "Account Status",
+                    value = profile.accountStatus
+                )
+
+                SecurityStatusRow(
+                    title = "Authentication",
+                    value = if (providers.isNotEmpty()) {
+                        providers.joinToString(", ")
+                    } else {
+                        "Firebase Authentication"
+                    }
+                )
+
+                SecurityStatusRow(
+                    title = "Email",
+                    value = if (user?.isEmailVerified == true) {
+                        "Verified"
+                    } else {
+                        "Not verified"
+                    }
+                )
+
+                SecurityStatusRow(
+                    title = "User ID",
+                    value = user?.uid ?: "Unavailable"
+                )
+            }
         },
         confirmButton = {
             TextButton(
-                enabled = !isDeleting,
-                onClick = onDelete
+                onClick = onChangePassword
             ) {
-                if (isDeleting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = Color(0xFFD32F2F)
-                    )
-                } else {
-                    Text(
-                        text = "Delete Account",
-                        color = Color(0xFFD32F2F)
-                    )
-                }
+                Text(
+                    text = "Change Password",
+                    color = GroceryGreen
+                )
             }
         },
         dismissButton = {
             TextButton(
-                enabled = !isDeleting,
                 onClick = onDismiss
             ) {
                 Text(
-                    text = "Cancel",
-                    color = GroceryGreen
+                    text = "Close",
+                    color = GroceryGray
                 )
             }
         }
     )
+}
+
+@Composable
+private fun SecurityStatusRow(
+    title: String,
+    value: String
+) {
+    Column {
+        Text(
+            text = title,
+            fontSize = 11.sp,
+            color = GroceryGray
+        )
+
+        Spacer(
+            modifier = Modifier.height(2.dp)
+        )
+
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = GroceryDark,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
 
 @Composable
