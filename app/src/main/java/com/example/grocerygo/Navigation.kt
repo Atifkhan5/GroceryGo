@@ -28,7 +28,9 @@ private enum class NavigationTab {
     ORDERS,
     ADMIN,
     PROFILE,
-    CHECKOUT
+    CHECKOUT,
+    ADMIN_ORDERS,
+    WISHLIST
 }
 
 @Composable
@@ -199,7 +201,10 @@ fun GroceryNavigation(
                             onBackClick = {
                                 selectedTab = NavigationTab.HOME
                             },
-                            onLogout = onLogout
+                            onLogout = onLogout,
+                            onManageOrdersClick = {
+                                selectedTab = NavigationTab.ADMIN_ORDERS
+                            }
                         )
                     } else {
                         selectedTab = NavigationTab.HOME
@@ -208,7 +213,13 @@ fun GroceryNavigation(
 
                 NavigationTab.PROFILE -> {
                     ProfileScreen(
-                        onLogout = onLogout
+                        onLogout = onLogout,
+                        onWishlistClick = {
+                            selectedTab = NavigationTab.WISHLIST
+                        },
+                        onOrdersClick = {
+                            selectedTab = NavigationTab.ORDERS
+                        }
                     )
                 }
 
@@ -220,6 +231,29 @@ fun GroceryNavigation(
                         onOrderPlaced = {
                             CartManager.clearCart()
                             selectedTab = NavigationTab.ORDERS
+                        }
+                    )
+                }
+
+                NavigationTab.ADMIN_ORDERS -> {
+                    if (isAdmin) {
+                        AdminOrderScreen(
+                            onBackClick = {
+                                selectedTab = NavigationTab.ADMIN
+                            }
+                        )
+                    } else {
+                        selectedTab = NavigationTab.HOME
+                    }
+                }
+
+                NavigationTab.WISHLIST -> {
+                    WishlistScreen(
+                        onBackClick = {
+                            selectedTab = NavigationTab.PROFILE
+                        },
+                        onProductClick = { productId ->
+                            selectedProductId = productId
                         }
                     )
                 }

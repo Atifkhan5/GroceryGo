@@ -28,7 +28,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -86,6 +88,7 @@ data class GroceryUserProfile(
     val fullName: String = "",
     val email: String = "",
     val phone: String = "",
+    val address: String = "",
     val role: String = "user",
     val accountType: String = "Personal",
     val accountStatus: String = "Active"
@@ -96,7 +99,8 @@ data class GroceryUserProfile(
 fun ProfileScreen(
     onBackClick: () -> Unit = {},
     onLogout: () -> Unit = {},
-    onOrdersClick: () -> Unit = {}
+    onOrdersClick: () -> Unit = {},
+    onWishlistClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -176,6 +180,8 @@ fun ProfileScreen(
                             ?: "",
                         phone = document.getString("phone")
                             ?: "",
+                        address = document.getString("address")
+                            ?: "",
                         role = document.getString("role")
                             ?: "user",
                         accountType = document.getString("accountType")
@@ -235,6 +241,8 @@ fun ProfileScreen(
                             ?: user.email
                             ?: "",
                         phone = snapshot.getString("phone")
+                            ?: "",
+                        address = snapshot.getString("address")
                             ?: "",
                         role = snapshot.getString("role")
                             ?: "user",
@@ -365,6 +373,7 @@ fun ProfileScreen(
                         showPasswordDialog = true
                     },
                     onOrdersClick = onOrdersClick,
+                    onWishlistClick = onWishlistClick,
                     onAccountSecurity = {
                         showSecurityDialog = true
                     },
@@ -388,7 +397,7 @@ fun ProfileScreen(
                     showEditDialog = false
                 }
             },
-            onSave = { fullName, phone ->
+            onSave = { fullName, phone, address ->
 
                 val user = auth.currentUser
 
@@ -401,7 +410,8 @@ fun ProfileScreen(
 
                 val updates = hashMapOf<String, Any>(
                     "fullName" to fullName,
-                    "phone" to phone
+                    "phone" to phone,
+                    "address" to address
                 )
 
                 firestore
@@ -577,6 +587,7 @@ private fun ProfileContent(
     onEditProfile: () -> Unit,
     onChangePassword: () -> Unit,
     onOrdersClick: () -> Unit,
+    onWishlistClick: () -> Unit,
     onAccountSecurity: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -616,6 +627,15 @@ private fun ProfileContent(
                 title = "My Orders",
                 subtitle = "View your previous and current orders",
                 onClick = onOrdersClick
+            )
+        }
+
+        item {
+            ProfileOption(
+                icon = Icons.Default.Favorite,
+                title = "My Wishlist",
+                subtitle = "View your favorite grocery products",
+                onClick = onWishlistClick
             )
         }
 
@@ -908,6 +928,19 @@ private fun AccountInformationCard(
             )
 
             ProfileInfoRow(
+                icon = Icons.Default.LocationOn,
+                title = "Default Address",
+                value = profile.address.ifBlank {
+                    "Not provided"
+                }
+            )
+
+            Divider(
+                modifier = Modifier.padding(vertical = 10.dp),
+                color = Color(0xFFEAEAEA)
+            )
+
+            ProfileInfoRow(
                 icon = Icons.Default.AccountCircle,
                 title = "Account Type",
                 value = profile.accountType
@@ -1071,7 +1104,7 @@ private fun EditProfileDialog(
     profile: GroceryUserProfile,
     isSaving: Boolean,
     onDismiss: () -> Unit,
-    onSave: (String, String) -> Unit
+    onSave: (String, String, String) -> Unit
 ) {
     var fullName by remember {
         mutableStateOf(profile.fullName)
@@ -1079,6 +1112,10 @@ private fun EditProfileDialog(
 
     var phone by remember {
         mutableStateOf(profile.phone)
+    }
+
+    var address by remember {
+        mutableStateOf(profile.address)
     }
 
     var validationError by remember {
@@ -1170,6 +1207,34 @@ private fun EditProfileDialog(
                     )
                 )
 
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = {
+                        address = it
+                        validationError = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = {
+                        Text(
+                            text = "Delivery Address"
+                        )
+                    },
+                    minLines = 2,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null
+                        )
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GroceryGreen
+                    )
+                )
+
                 if (validationError.isNotBlank()) {
                     Spacer(
                         modifier = Modifier.height(7.dp)
@@ -1205,7 +1270,8 @@ private fun EditProfileDialog(
                         else -> {
                             onSave(
                                 trimmedName,
-                                trimmedPhone
+                                trimmedPhone,
+                                address.trim()
                             )
                         }
                     }

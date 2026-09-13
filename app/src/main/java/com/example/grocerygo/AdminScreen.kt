@@ -28,7 +28,9 @@ import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -84,7 +86,8 @@ import java.util.Locale
 @Composable
 fun AdminScreen(
     onBackClick: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onManageOrdersClick: () -> Unit
 ) {
     val auth = remember {
         FirebaseAuth.getInstance()
@@ -134,8 +137,20 @@ fun AdminScreen(
         mutableStateOf(false)
     }
 
+    var totalSales by remember {
+        mutableStateOf(0.0)
+    }
+
     var listenerRegistration by remember {
         mutableStateOf<ListenerRegistration?>(null)
+    }
+
+    LaunchedEffect(Unit) {
+        firestore.collection("orders")
+            .whereEqualTo("status", "Delivered")
+            .addSnapshotListener { snapshot, _ ->
+                totalSales = snapshot?.documents?.sumOf { it.getDouble("totalAmount") ?: 0.0 } ?: 0.0
+            }
     }
 
     LaunchedEffect(Unit) {
@@ -424,6 +439,16 @@ fun AdminScreen(
 
                             DropdownMenuItem(
                                 text = {
+                                    Text("Manage All Orders")
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onManageOrdersClick()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
                                     Text("Logout")
                                 },
                                 onClick = {
@@ -505,6 +530,32 @@ fun AdminScreen(
                         icon = Icons.Default.LocalOffer,
                         modifier = Modifier.weight(1f)
                     )
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AdminStatCard(
+                        title = "Delivered Revenue",
+                        value = "PKR ${totalSales.toInt()}",
+                        icon = Icons.Default.ShoppingCart,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Button(
+                        onClick = onManageOrdersClick,
+                        modifier = Modifier.weight(1f).height(65.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GroceryGreen)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.ReceiptLong, null, modifier = Modifier.size(20.dp))
+                            Text("Manage Orders", fontSize = 10.sp)
+                        }
+                    }
                 }
             }
 

@@ -1,5 +1,6 @@
 package com.example.grocerygo
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -55,6 +57,7 @@ import com.example.grocerygo.ui.theme.GroceryDark
 import com.example.grocerygo.ui.theme.GroceryGray
 import com.example.grocerygo.ui.theme.GroceryGreen
 import com.example.grocerygo.ui.theme.GroceryLightGreen
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Locale
 
@@ -88,6 +91,60 @@ fun ProductDetailScreen(
 
     var isFavorite by remember {
         mutableStateOf(false)
+    }
+
+    val context = LocalContext.current
+    val auth = remember { FirebaseAuth.getInstance() }
+
+    LaunchedEffect(productId, auth.currentUser?.uid) {
+        val user = auth.currentUser
+        if (user != null) {
+            firestore.collection("users").document(user.uid)
+                .collection("wishlist").document(productId)
+                .get()
+                .addOnSuccessListener { isFavorite = it.exists() }
+        }
+    }
+
+    fun toggleFavorite(groceryProduct: GroceryProduct) {
+        val user = auth.currentUser
+        if (user == null) {
+            Toast.makeText(context, "Please login to add to wishlist", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val wishlistRef = firestore.collection("users").document(user.uid)
+            .collection("wishlist").document(productId)
+            
+        if (isFavorite) {
+            wishlistRef.delete()
+                .addOnSuccessListener { 
+                    isFavorite = false
+                    Toast.makeText(context, "Removed from wishlist", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener {
+                    Toast.makeText(context, "Failed to remove: ${it.message}", Toast.LENGTH_SHORT).show()
+                }
+        } else {
+            val favData = hashMapOf(
+                "name" to groceryProduct.name,
+                "category" to groceryProduct.category,
+                "price" to groceryProduct.price,
+                "discount" to groceryProduct.discount,
+                "imageUrl" to groceryProduct.imageUrl,
+                "stock" to groceryProduct.stock,
+                "unit" to groceryProduct.unit,
+                "addedAt" to System.currentTimeMillis()
+            )
+            wishlistRef.set(favData)
+                .addOnSuccessListener { 
+                    isFavorite = true
+                    Toast.makeText(context, "Added to wishlist", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener {
+                    Toast.makeText(context, "Failed to add: ${it.message}", Toast.LENGTH_SHORT).show()
+                }
+        }
     }
 
     LaunchedEffect(productId) {
@@ -293,7 +350,7 @@ fun ProductDetailScreen(
 
                     IconButton(
                         onClick = {
-                            isFavorite = !isFavorite
+                            toggleFavorite(groceryProduct)
                         },
                         modifier = Modifier
                             .align(Alignment.TopEnd)

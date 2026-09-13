@@ -40,12 +40,24 @@ fun CheckoutScreen(
     var selectedPaymentMethod by remember { mutableStateOf("Cash on Delivery") }
     var isPlacingOrder by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+
+    LaunchedEffect(auth.currentUser?.uid) {
+        val user = auth.currentUser
+        if (user != null) {
+            firestore.collection("users").document(user.uid).get()
+                .addOnSuccessListener { doc ->
+                    name = doc.getString("fullName") ?: doc.getString("name") ?: ""
+                    phone = doc.getString("phone") ?: ""
+                    address = doc.getString("address") ?: ""
+                }
+        }
+    }
     
     val subtotal = cartItems.sumOf { it.product.discountedPrice * it.quantity }
     val deliveryFee = if (cartItems.isEmpty()) 0.0 else 150.0
     val total = subtotal + deliveryFee
 
-    val paymentMethods = listOf("Cash on Delivery", "Credit/Debit Card", "Google Pay")
+    val paymentMethods = listOf("Cash on Delivery", "UPI", "Credit/Debit Card", "Google Pay")
 
     fun placeOrder() {
         val user = auth.currentUser ?: return
