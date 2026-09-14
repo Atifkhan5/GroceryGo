@@ -15,11 +15,15 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.auth.FirebaseAuth
 
 private enum class NavigationTab {
     HOME,
@@ -38,6 +42,18 @@ fun GroceryNavigation(
     isAdmin: Boolean,
     onLogout: () -> Unit
 ) {
+    val context = LocalContext.current
+    val auth = remember { FirebaseAuth.getInstance() }
+    val currentUser = auth.currentUser
+
+    LaunchedEffect(currentUser?.uid) {
+        if (currentUser != null) {
+            CartManager.init(currentUser.uid)
+        } else {
+            CartManager.cleanup()
+        }
+    }
+
     var selectedTab by rememberSaveable {
         mutableStateOf(NavigationTab.HOME)
     }
@@ -187,12 +203,22 @@ fun GroceryNavigation(
                     CartScreen(
                         onCheckoutClick = {
                             selectedTab = NavigationTab.CHECKOUT
+                        },
+                        onContinueShopping = {
+                            selectedTab = NavigationTab.PRODUCTS
                         }
                     )
                 }
 
                 NavigationTab.ORDERS -> {
-                    OrderScreen()
+                    OrderScreen(
+                        onBackClick = {
+                            selectedTab = NavigationTab.HOME
+                        },
+                        onContinueShopping = {
+                            selectedTab = NavigationTab.PRODUCTS
+                        }
+                    )
                 }
 
                 NavigationTab.ADMIN -> {
@@ -266,7 +292,7 @@ fun GroceryNavigation(
                         selectedProductId = null
                     },
                     onAddToCart = { product, quantity ->
-                        CartManager.addToCart(product, quantity)
+                        CartManager.addToCart(context, product, quantity)
                         selectedProductId = null
                         selectedTab = NavigationTab.CART
                     }

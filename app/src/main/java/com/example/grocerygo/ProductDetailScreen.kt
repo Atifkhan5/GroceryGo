@@ -681,13 +681,10 @@ fun ProductDetailScreen(
 
                     Button(
                         onClick = {
-
                             if (groceryProduct.stock > 0) {
-
-                                onAddToCart(
-                                    groceryProduct,
-                                    quantity
-                                )
+                                onAddToCart(groceryProduct, quantity)
+                            } else {
+                                Toast.makeText(context, "Out of stock", Toast.LENGTH_SHORT).show()
                             }
                         },
                         enabled = groceryProduct.stock > 0,

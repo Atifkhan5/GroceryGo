@@ -1,4 +1,3 @@
-
 package com.example.grocerygo
 
 import android.util.Patterns
@@ -229,17 +228,9 @@ fun RegisterScreen(
 
                     isLoading = false
 
-                    /*
-                     * Registration is completely finished.
-                     *
-                     * Firebase Authentication account exists.
-                     * Firestore user profile exists.
-                     *
-                     * Now Navigation.kt decides where to go.
-                     */
                     onRegisterSuccess()
                 }
-                .addOnFailureListener { exception ->
+                .addOnFailureListener {
 
                     isLoading = false
 

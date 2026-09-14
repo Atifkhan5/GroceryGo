@@ -2,8 +2,8 @@ package com.example.grocerygo
 
 import android.content.Intent
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -195,6 +195,7 @@ fun ProfileScreen(
                         fullName = user.displayName ?: "",
                         email = user.email ?: "",
                         phone = "",
+                        address = "",
                         role = "user",
                         accountType = "Personal",
                         accountStatus = "Active"
@@ -257,6 +258,7 @@ fun ProfileScreen(
                         fullName = user.displayName ?: "",
                         email = user.email ?: "",
                         phone = "",
+                        address = "",
                         role = "user",
                         accountType = "Personal",
                         accountStatus = "Active"
@@ -796,9 +798,8 @@ private fun ProfileHeader(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 ProfileHeaderBadge(
-                    text = if (
-                        profile.role.equals(
-                            "admin",
+                    text = if (profile.email.equals(
+                            "admin@gmail.com",
                             ignoreCase = true
                         )
                     ) {

@@ -1,5 +1,6 @@
 package com.example.grocerygo
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -37,11 +39,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 
 data class CartItem(
     val product: GroceryProduct,
@@ -52,118 +59,409 @@ object CartManager {
 
     private val items = mutableStateListOf<CartItem>()
 
+    private var listenerRegistration: ListenerRegistration? = null
+    private var currentUserId: String? = null
+
     fun getItems(): SnapshotStateList<CartItem> {
         return items
     }
 
-    fun addToCart(product: GroceryProduct, quantity: Int = 1) {
+    fun init(userId: String) {
 
-        if (product.stock <= 0) {
+        if (currentUserId == userId && listenerRegistration != null) {
             return
         }
 
-        val existingIndex = items.indexOfFirst {
-            it.product.id == product.id
+        listenerRegistration?.remove()
+        listenerRegistration = null
+
+        currentUserId = userId
+        items.clear()
+
+        val firestore = FirebaseFirestore.getInstance()
+
+        listenerRegistration = firestore
+            .collection("users")
+            .document(userId)
+            .collection("cart")
+            .addSnapshotListener { snapshot, error ->
+
+                if (error != null || snapshot == null) {
+                    return@addSnapshotListener
+                }
+
+                val cartItems = snapshot.documents.mapNotNull { document ->
+
+                    try {
+
+                        val quantity =
+                            document.getLong("quantity")?.toInt() ?: 1
+
+                        val productData =
+                            document.get("product") as? Map<*, *>
+
+                        if (productData == null) {
+                            return@mapNotNull null
+                        }
+
+                        val product = GroceryProduct(
+                            id = document.id,
+                            name = productData["name"] as? String ?: "",
+                            category = productData["category"] as? String ?: "",
+                            price = (productData["price"] as? Number)?.toDouble() ?: 0.0,
+                            discount = (productData["discount"] as? Number)?.toDouble() ?: 0.0,
+                            description = productData["description"] as? String ?: "",
+                            imageUrl = productData["imageUrl"] as? String ?: "",
+                            stock = (productData["stock"] as? Number)?.toInt() ?: 0,
+                            unit = productData["unit"] as? String ?: "piece",
+                            featured = productData["featured"] as? Boolean ?: false,
+                            bestSeller = productData["bestSeller"] as? Boolean ?: false,
+                            dailyOffer = productData["dailyOffer"] as? Boolean ?: false,
+                            createdAt = (productData["createdAt"] as? Number)?.toLong() ?: 0L
+                        )
+
+                        CartItem(
+                            product = product,
+                            quantity = quantity
+                        )
+
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+
+                items.clear()
+                items.addAll(cartItems)
+            }
+    }
+
+    fun cleanup() {
+
+        listenerRegistration?.remove()
+        listenerRegistration = null
+        currentUserId = null
+        items.clear()
+    }
+
+    private fun getUserId(): String? {
+        return FirebaseAuth
+            .getInstance()
+            .currentUser
+            ?.uid
+    }
+
+    fun addToCart(
+        context: android.content.Context,
+        product: GroceryProduct,
+        quantity: Int
+    ) {
+
+        val userId = getUserId()
+
+        if (userId == null) {
+
+            Toast.makeText(
+                context,
+                "Please login first",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            return
         }
 
-        if (existingIndex >= 0) {
+        if (product.stock <= 0) {
 
-            val existingItem = items[existingIndex]
-            val newQuantity = (existingItem.quantity + quantity).coerceAtMost(product.stock)
+            Toast.makeText(
+                context,
+                "Product is out of stock",
+                Toast.LENGTH_SHORT
+            ).show()
 
-            items[existingIndex] = existingItem.copy(
-                quantity = newQuantity
+            return
+        }
+
+        val firestore = FirebaseFirestore.getInstance()
+
+        val cartRef = firestore
+            .collection("users")
+            .document(userId)
+            .collection("cart")
+            .document(product.id)
+
+        val productData = hashMapOf(
+            "name" to product.name,
+            "category" to product.category,
+            "price" to product.price,
+            "discount" to product.discount,
+            "description" to product.description,
+            "imageUrl" to product.imageUrl,
+            "stock" to product.stock,
+            "unit" to product.unit,
+            "featured" to product.featured,
+            "bestSeller" to product.bestSeller,
+            "dailyOffer" to product.dailyOffer,
+            "createdAt" to product.createdAt
+        )
+
+        firestore.runTransaction { transaction ->
+
+            val snapshot = transaction.get(cartRef)
+
+            val existingQuantity =
+                snapshot.getLong("quantity")?.toInt() ?: 0
+
+            val newQuantity =
+                (existingQuantity + quantity)
+                    .coerceAtMost(product.stock)
+
+            val data = hashMapOf<String, Any>(
+                "quantity" to newQuantity,
+                "product" to productData
             )
 
-        } else {
-
-            items.add(
-                CartItem(
-                    product = product,
-                    quantity = quantity.coerceAtMost(product.stock)
-                )
+            transaction.set(
+                cartRef,
+                data
             )
+
+            null
+        }.addOnSuccessListener {
+
+            Toast.makeText(
+                context,
+                "Added to cart",
+                Toast.LENGTH_SHORT
+            ).show()
+
+        }.addOnFailureListener { exception ->
+
+            Toast.makeText(
+                context,
+                "Failed to add to cart: ${exception.message}",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
-    fun increaseQuantity(productId: String) {
+    fun increaseQuantity(
+        context: android.content.Context,
+        productId: String
+    ) {
 
-        val index = items.indexOfFirst {
-            it.product.id == productId
+        val userId = getUserId()
+
+        if (userId == null) {
+
+            Toast.makeText(
+                context,
+                "Please login first",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            return
         }
 
-        if (index >= 0) {
+        val firestore = FirebaseFirestore.getInstance()
 
-            val item = items[index]
+        val cartRef = firestore
+            .collection("users")
+            .document(userId)
+            .collection("cart")
+            .document(productId)
 
-            if (item.quantity < item.product.stock) {
+        firestore.runTransaction { transaction ->
 
-                items[index] = item.copy(
-                    quantity = item.quantity + 1
+            val snapshot = transaction.get(cartRef)
+
+            if (!snapshot.exists()) {
+                return@runTransaction null
+            }
+
+            val currentQuantity =
+                snapshot.getLong("quantity")?.toInt() ?: 1
+
+            val productData =
+                snapshot.get("product") as? Map<*, *>
+
+            val stock =
+                (productData?.get("stock") as? Number)?.toInt() ?: 0
+
+            if (stock <= 0) {
+                throw Exception("Product is out of stock")
+            }
+
+            if (currentQuantity >= stock) {
+                throw Exception(
+                    "Only $stock items available"
                 )
             }
+
+            transaction.update(
+                cartRef,
+                "quantity",
+                currentQuantity + 1
+            )
+
+            null
+
+        }.addOnSuccessListener {
+
+            Toast.makeText(
+                context,
+                "Quantity increased",
+                Toast.LENGTH_SHORT
+            ).show()
+
+        }.addOnFailureListener { exception ->
+
+            Toast.makeText(
+                context,
+                exception.message ?: "Unable to increase quantity",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
-    fun decreaseQuantity(productId: String) {
+    fun decreaseQuantity(
+        context: android.content.Context,
+        productId: String
+    ) {
 
-        val index = items.indexOfFirst {
-            it.product.id == productId
-        }
+        val userId = getUserId() ?: return
 
-        if (index >= 0) {
+        val firestore = FirebaseFirestore.getInstance()
 
-            val item = items[index]
+        val cartRef = firestore
+            .collection("users")
+            .document(userId)
+            .collection("cart")
+            .document(productId)
 
-            if (item.quantity > 1) {
+        firestore.runTransaction { transaction ->
 
-                items[index] = item.copy(
-                    quantity = item.quantity - 1
-                )
+            val snapshot = transaction.get(cartRef)
+
+            if (!snapshot.exists()) {
+                return@runTransaction null
+            }
+
+            val currentQuantity =
+                snapshot.getLong("quantity")?.toInt() ?: 1
+
+            if (currentQuantity <= 1) {
+
+                transaction.delete(cartRef)
 
             } else {
 
-                items.removeAt(index)
+                transaction.update(
+                    cartRef,
+                    "quantity",
+                    currentQuantity - 1
+                )
             }
+
+            null
+
+        }.addOnFailureListener { exception ->
+
+            Toast.makeText(
+                context,
+                exception.message ?: "Unable to decrease quantity",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
-    fun removeFromCart(productId: String) {
+    fun removeFromCart(
+        productId: String
+    ) {
 
-        items.removeAll {
-            it.product.id == productId
-        }
+        val userId = getUserId() ?: return
+
+        FirebaseFirestore
+            .getInstance()
+            .collection("users")
+            .document(userId)
+            .collection("cart")
+            .document(productId)
+            .delete()
     }
 
     fun clearCart() {
 
-        items.clear()
+        val userId = getUserId() ?: return
+
+        val firestore = FirebaseFirestore.getInstance()
+
+        val cartCollection = firestore
+            .collection("users")
+            .document(userId)
+            .collection("cart")
+
+        cartCollection
+            .get()
+            .addOnSuccessListener { snapshot ->
+
+                val batch = firestore.batch()
+
+                for (document in snapshot.documents) {
+                    batch.delete(document.reference)
+                }
+
+                batch.commit()
+            }
     }
 }
 
 @Composable
 fun CartScreen(
-    onCheckoutClick: () -> Unit = {}
+    onCheckoutClick: () -> Unit = {},
+    onContinueShopping: () -> Unit = {}
 ) {
 
-    val cartItems = CartManager.getItems()
+    val context = LocalContext.current
+
+    val currentUser =
+        FirebaseAuth.getInstance().currentUser
+
+    val cartItems =
+        CartManager.getItems()
+
+    LaunchedEffect(currentUser?.uid) {
+
+        if (currentUser != null) {
+
+            CartManager.init(
+                currentUser.uid
+            )
+
+        } else {
+
+            CartManager.cleanup()
+        }
+    }
 
     val subtotal = cartItems.sumOf {
         it.product.discountedPrice * it.quantity
     }
 
-    val deliveryFee = if (cartItems.isEmpty()) {
-        0.0
-    } else {
-        150.0
-    }
+    val deliveryFee =
+        if (cartItems.isEmpty()) {
+            0.0
+        } else {
+            150.0
+        }
 
-    val total = subtotal + deliveryFee
+    val total =
+        subtotal + deliveryFee
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8FAFC))
+            .background(
+                Color(0xFFF8FAFC)
+            )
     ) {
 
         Row(
@@ -211,7 +509,9 @@ fun CartScreen(
 
         if (cartItems.isEmpty()) {
 
-            EmptyCartContent()
+            EmptyCartContent(
+                onContinueShopping = onContinueShopping
+            )
 
         } else {
 
@@ -219,8 +519,12 @@ fun CartScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(
+                        horizontal = 16.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(
+                    12.dp
+                )
             ) {
 
                 item {
@@ -239,18 +543,23 @@ fun CartScreen(
 
                     CartItemCard(
                         cartItem = cartItem,
+
                         onIncrease = {
 
                             CartManager.increaseQuantity(
-                                cartItem.product.id
+                                context = context,
+                                productId = cartItem.product.id
                             )
                         },
+
                         onDecrease = {
 
                             CartManager.decreaseQuantity(
-                                cartItem.product.id
+                                context = context,
+                                productId = cartItem.product.id
                             )
                         },
+
                         onRemove = {
 
                             CartManager.removeFromCart(
@@ -288,7 +597,8 @@ private fun CartItemCard(
 
     val product = cartItem.product
 
-    val discountedPrice = product.discountedPrice
+    val discountedPrice =
+        product.discountedPrice
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -314,7 +624,9 @@ private fun CartItemCard(
                     .clip(
                         RoundedCornerShape(12.dp)
                     )
-                    .background(Color(0xFFF1F5F9)),
+                    .background(
+                        Color(0xFFF1F5F9)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
 
@@ -365,7 +677,11 @@ private fun CartItemCard(
                     ) {
 
                         Text(
-                            text = "PKR ${"%.0f".format(discountedPrice)}",
+                            text = "PKR ${
+                                "%.0f".format(
+                                    discountedPrice
+                                )
+                            }",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF16A34A)
@@ -376,7 +692,11 @@ private fun CartItemCard(
                         )
 
                         Text(
-                            text = "PKR ${"%.0f".format(product.price)}",
+                            text = "PKR ${
+                                "%.0f".format(
+                                    product.price
+                                )
+                            }",
                             fontSize = 12.sp,
                             color = Color(0xFF94A3B8),
                             textDecoration = TextDecoration.LineThrough
@@ -386,7 +706,11 @@ private fun CartItemCard(
                 } else {
 
                     Text(
-                        text = "PKR ${"%.0f".format(discountedPrice)}",
+                        text = "PKR ${
+                            "%.0f".format(
+                                discountedPrice
+                            )
+                        }",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF16A34A)
@@ -418,7 +742,8 @@ private fun CartItemCard(
                         modifier = Modifier.width(30.dp),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827)
+                        color = Color(0xFF111827),
+                        textAlign = TextAlign.Center
                     )
 
                     IconButton(
@@ -429,7 +754,10 @@ private fun CartItemCard(
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Increase quantity",
-                            tint = if (cartItem.quantity < product.stock) {
+                            tint = if (
+                                product.stock > 0 &&
+                                cartItem.quantity < product.stock
+                            ) {
                                 Color(0xFF16A34A)
                             } else {
                                 Color(0xFF94A3B8)
@@ -461,7 +789,8 @@ private fun CartItemCard(
                 Text(
                     text = "PKR ${
                         "%.0f".format(
-                            discountedPrice * cartItem.quantity
+                            discountedPrice *
+                                    cartItem.quantity
                         )
                     }",
                     fontSize = 14.sp,
@@ -474,7 +803,9 @@ private fun CartItemCard(
 }
 
 @Composable
-private fun EmptyCartContent() {
+private fun EmptyCartContent(
+    onContinueShopping: () -> Unit
+) {
 
     Box(
         modifier = Modifier
@@ -512,8 +843,26 @@ private fun EmptyCartContent() {
             Text(
                 text = "Add some groceries to your cart and they will appear here.",
                 fontSize = 14.sp,
-                color = Color(0xFF64748B)
+                color = Color(0xFF64748B),
+                textAlign = TextAlign.Center
             )
+
+            Spacer(
+                modifier = Modifier.height(24.dp)
+            )
+
+            Button(
+                onClick = onContinueShopping,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF16A34A)
+                )
+            ) {
+
+                Text(
+                    text = "Continue Shopping"
+                )
+            }
         }
     }
 }

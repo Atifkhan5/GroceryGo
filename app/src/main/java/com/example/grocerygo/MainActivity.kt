@@ -125,6 +125,7 @@ class MainActivity : ComponentActivity() {
                     GroceryNavigation(
                         isAdmin = isAdmin,
                         onLogout = {
+                            CartManager.cleanup()
                             auth.signOut()
                             isLoggedIn = false
                             currentScreen = Screen.LOGIN
@@ -201,11 +202,11 @@ class MainActivity : ComponentActivity() {
 
                                     Toast.makeText(
                                         context,
-                                        "Registration Successful! Please login.",
+                                        "Registration Successful!",
                                         Toast.LENGTH_SHORT
                                     ).show()
 
-                                    currentScreen = Screen.LOGIN
+                                    isLoggedIn = true
                                 },
 
                                 onLoginClick = {

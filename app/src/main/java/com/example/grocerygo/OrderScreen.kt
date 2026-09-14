@@ -102,7 +102,8 @@ data class GroceryOrder(
 @Composable
 fun OrderScreen(
     onBackClick: () -> Unit = {},
-    onOrderClick: (GroceryOrder) -> Unit = {}
+    onOrderClick: (GroceryOrder) -> Unit = {},
+    onContinueShopping: () -> Unit = {}
 ) {
 
     val auth = remember {
@@ -419,7 +420,8 @@ fun OrderScreen(
 
                 EmptyOrdersState(
                     paddingValues = paddingValues,
-                    onBackClick = onBackClick
+                    onContinueShopping =
+                        onContinueShopping
                 )
             }
 
@@ -1354,7 +1356,7 @@ private fun OrderErrorState(
 @Composable
 private fun EmptyOrdersState(
     paddingValues: PaddingValues,
-    onBackClick: () -> Unit
+    onContinueShopping: () -> Unit
 ) {
 
     Box(
@@ -1432,7 +1434,8 @@ private fun EmptyOrdersState(
             )
 
             Button(
-                onClick = onBackClick
+                onClick =
+                    onContinueShopping
             ) {
 
                 Text(
